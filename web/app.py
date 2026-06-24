@@ -263,15 +263,16 @@ async def start_align(
     if _disk_free_mb() < DISK_FLOOR_MB:
         raise HTTPException(503, "Server is low on disk space. Please retry later — old jobs are pruned every hour.")
 
-    # Daily quota
+    # Daily quota — this is a private server with a small daily cap. If hit,
+    # come back later or run the CLI yourself (github.com/sypianski/paraligilo).
     if mode == "ai":
         used = _count_recent("ai", 24)
         if used >= DAILY_QUOTA_AI:
-            raise HTTPException(429, f"Daily AI quota reached ({used}/{DAILY_QUOTA_AI} in the last 24h). The deterministic mode is unlimited.")
+            raise HTTPException(429, f"Daily AI quota reached ({used}/{DAILY_QUOTA_AI} in the last 24h) — this is a small private server. Either wait a few hours, switch to the free deterministic mode, or run the CLI yourself: github.com/sypianski/paraligilo")
     else:
         used = _count_recent("deterministic", 24)
         if used >= DAILY_QUOTA_DET:
-            raise HTTPException(429, f"Daily quota reached ({used}/{DAILY_QUOTA_DET} in the last 24h). Try again in a few hours.")
+            raise HTTPException(429, f"Daily quota reached ({used}/{DAILY_QUOTA_DET} in the last 24h) — this is a small private server. Either wait a few hours or run the CLI yourself: github.com/sypianski/paraligilo")
 
     job_id, jdir = _new_job_dir()
     orig_path = jdir / "orig.epub"
