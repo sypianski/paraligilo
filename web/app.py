@@ -184,13 +184,57 @@ async def _run_pipeline(job_id: str, api_key: str, mode: str, llm: bool, base_ur
                 rc = await proc.wait()
             j["return_code"] = rc
             j["finished_at"] = time.time()
-            if rc == 0:
-                j["status"] = "done"
-            else:
+            if rc != 0:
                 j["status"] = "failed"
+                return
+
+            # Post-process: produce rosetta-aligned.json + bundled zip
+            await _post_process(j, log_path)
+            j["status"] = "done"
         except Exception as e:
             j["status"] = "failed"
             j["error"] = str(e)
+
+
+async def _post_process(j: dict, log_path: Path):
+    """Emit rosetta-aligned.json + bundle everything into a zip."""
+    workdir = j["dir"]
+    orig_jsonl  = workdir / "book_orig.jsonl"
+    trans_jsonl = workdir / "book_trans.jsonl"
+    align_final = workdir / "book_final.jsonl"
+    rosetta_json = workdir / "rosetta-aligned.json"
+    bundle_zip   = workdir / "paraligilo-output.zip"
+
+    if align_final.exists() and orig_jsonl.exists() and trans_jsonl.exists():
+        # Method label for the JSON metadata
+        method = "embeddings" if j["mode"] == "ai" else "gale-church"
+        emit_cmd = [
+            str(ROOT / "emit_rosetta.py"),
+            "--orig-jsonl", str(orig_jsonl),
+            "--trans-jsonl", str(trans_jsonl),
+            "--align", str(align_final),
+            "--src-file", j["orig_name"],
+            "--tgt-file", j["trans_name"],
+            "--method", method,
+            "-o", str(rosetta_json),
+        ]
+        with log_path.open("ab") as logf:
+            logf.write(f"\n$ {' '.join(emit_cmd)}\n".encode())
+            proc = await asyncio.create_subprocess_exec(
+                *emit_cmd, stdout=logf, stderr=subprocess.STDOUT,
+            )
+            await proc.wait()
+
+    # Bundle everything into a single zip
+    import zipfile
+    sample_md = workdir / "book_sample.md"
+    with zipfile.ZipFile(bundle_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+        for src in (align_final, rosetta_json, sample_md, log_path):
+            if src.exists():
+                arcname = "rosetta-aligned.json" if src == rosetta_json else \
+                          "alignment.jsonl" if src == align_final else \
+                          "sample.md" if src == sample_md else "run.log"
+                zf.write(src, arcname=arcname)
 
 
 def _job_progress(j: dict) -> dict:
@@ -351,6 +395,18 @@ async def download(request: Request, job_id: str, kind: str):
             raise HTTPException(500, "alignment missing")
         return FileResponse(f, filename="alignment.jsonl",
                             media_type="application/x-ndjson")
+    if kind == "rosetta":
+        f = j["dir"] / "rosetta-aligned.json"
+        if not f.exists():
+            raise HTTPException(500, "rosetta-aligned.json missing")
+        return FileResponse(f, filename="rosetta-aligned.json",
+                            media_type="application/json")
+    if kind == "zip":
+        f = j["dir"] / "paraligilo-output.zip"
+        if not f.exists():
+            raise HTTPException(500, "zip missing")
+        return FileResponse(f, filename="paraligilo-output.zip",
+                            media_type="application/zip")
     if kind == "sample":
         f = j["dir"] / "book_sample.md"
         if not f.exists():

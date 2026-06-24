@@ -119,9 +119,16 @@
 <div class="elapsed" id="elapsed">elapsed: —</div>
 
 <div id="downloads">
-  <a href="{{ request.url_for('download', job_id=job.id, kind='alignment') }}">alignment.jsonl</a>
+  <a href="{{ request.url_for('download', job_id=job.id, kind='zip') }}">paraligilo-output.zip</a>
+  <p style="font-size:0.85rem; color:var(--ink-mute); font-style:italic; margin:0.6rem 0 0.4rem;">contains all four files below — handy for one click</p>
+  <a class="secondary" href="{{ request.url_for('download', job_id=job.id, kind='rosetta') }}">rosetta-aligned.json</a>
+  <a class="secondary" href="{{ request.url_for('download', job_id=job.id, kind='alignment') }}">alignment.jsonl</a>
   <a class="secondary" href="{{ request.url_for('download', job_id=job.id, kind='sample') }}">sample.md</a>
   <a class="secondary" href="{{ request.url_for('download', job_id=job.id, kind='log') }}">run.log</a>
+  <p style="font-size:0.85rem; color:var(--ink-mute); margin-top:0.8rem;">
+    <strong style="color:var(--ink-soft); font-style:normal;">rosetta-aligned.json</strong> → drop into your book's <code>.sdr/</code> folder for the
+    <a href="https://github.com/sypianski/koreader-konfig/tree/master/koplugins/rosetta.koplugin">Rosetta KOReader plugin</a>.
+  </p>
 </div>
 
 <details class="logfold">
