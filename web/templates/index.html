@@ -20,7 +20,6 @@
   form.align-form label.lbl .hint {
     color: var(--ink-mute); font-style: italic; font-size: 0.9rem; margin-left: 0.5rem;
   }
-  form.align-form input[type=file],
   form.align-form input[type=password],
   form.align-form input[type=text] {
     width: 100%;
@@ -32,11 +31,65 @@
     color: var(--ink);
     border-radius: 2px;
   }
-  form.align-form input[type=file] { padding: 0.4rem; }
   form.align-form input[type=password]:focus,
   form.align-form input[type=text]:focus {
     outline: none; border-color: var(--accent);
   }
+
+  /* drop-zone upload */
+  .drop {
+    position: relative;
+    background: var(--bg-alt);
+    border: 1.5px dashed var(--rule);
+    border-radius: 2px;
+    padding: 1.1rem 1rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .drop:hover { border-color: var(--ink-mute); background: var(--bg); }
+  .drop.dragging {
+    border-color: var(--accent);
+    border-style: solid;
+    background: var(--bg);
+  }
+  .drop.has-file {
+    border-style: solid; border-color: var(--accent-soft);
+    background: var(--bg);
+    text-align: left;
+  }
+  .drop input[type=file] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer;
+    width: 100%; height: 100%;
+  }
+  .drop .icon {
+    display: inline-block;
+    color: var(--ink-mute);
+    margin-right: 0.5rem; vertical-align: -3px;
+  }
+  .drop.has-file .icon { color: var(--accent); }
+  .drop .prompt {
+    font-family: var(--font-body); color: var(--ink-soft);
+    font-size: 0.95rem;
+  }
+  .drop .prompt em { color: var(--accent-dark); font-style: normal; text-decoration: underline; text-underline-offset: 2px; }
+  .drop .filename {
+    font-family: var(--font-display); color: var(--ink);
+    font-size: 1rem; word-break: break-all;
+  }
+  .drop .filesize {
+    color: var(--ink-mute); font-size: 0.82rem;
+    font-style: italic; margin-left: 0.5rem;
+  }
+  .drop .clear {
+    position: absolute; top: 0.4rem; right: 0.4rem;
+    width: 22px; height: 22px; line-height: 18px; text-align: center;
+    background: var(--bg-alt); border: 1px solid var(--rule); border-radius: 50%;
+    cursor: pointer; color: var(--ink-mute); font-size: 14px;
+    display: none; z-index: 2;
+  }
+  .drop.has-file .clear { display: block; }
+  .drop .clear:hover { color: var(--ink); border-color: var(--ink-mute); }
   .modes { display: flex; gap: 1rem; flex-wrap: wrap; }
   .mode { flex: 1 1 16rem; }
   .mode label {
@@ -94,12 +147,26 @@
 
   <div class="row">
     <label class="lbl">Original EPUB <span class="hint">the book in its source language</span></label>
-    <input type="file" name="orig" accept=".epub" required>
+    <div class="drop" data-drop>
+      <span class="clear" title="Remove">×</span>
+      <input type="file" name="orig" accept=".epub" required>
+      <div class="prompt">
+        <svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Drop EPUB here, or <em>browse</em>
+      </div>
+    </div>
   </div>
 
   <div class="row">
     <label class="lbl">Translation EPUB <span class="hint">the same book in another language</span></label>
-    <input type="file" name="trans" accept=".epub" required>
+    <div class="drop" data-drop>
+      <span class="clear" title="Remove">×</span>
+      <input type="file" name="trans" accept=".epub" required>
+      <div class="prompt">
+        <svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Drop EPUB here, or <em>browse</em>
+      </div>
+    </div>
   </div>
 
   <div class="row">
@@ -166,5 +233,81 @@
 <p><a href="https://github.com/sypianski/paraligilo">github.com/sypianski/paraligilo</a> — AGPL-3.0. Built for the <a href="https://github.com/sypianski/koreader-konfig">splitread KOReader plugin</a> but useful for parallel reading apps, bilingual EPUB construction, language-learning decks, translation studies.</p>
 
 </main>
+
+<script>
+function fmtBytes(n) {
+  if (n < 1024) return n + ' B';
+  if (n < 1024*1024) return (n/1024).toFixed(0) + ' KB';
+  return (n/1024/1024).toFixed(1) + ' MB';
+}
+function showFile(drop, file) {
+  drop.classList.add('has-file');
+  const prompt = drop.querySelector('.prompt');
+  prompt.innerHTML =
+    '<svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>' +
+    '<span class="filename">' + file.name.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span>' +
+    '<span class="filesize">' + fmtBytes(file.size) + '</span>';
+}
+function resetDrop(drop) {
+  drop.classList.remove('has-file');
+  const input = drop.querySelector('input[type=file]');
+  input.value = '';
+  drop.querySelector('.prompt').innerHTML =
+    '<svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Drop EPUB here, or <em>browse</em>';
+}
+
+document.querySelectorAll('[data-drop]').forEach(drop => {
+  const input = drop.querySelector('input[type=file]');
+  const clearBtn = drop.querySelector('.clear');
+
+  input.addEventListener('change', () => {
+    if (input.files && input.files[0]) showFile(drop, input.files[0]);
+    else resetDrop(drop);
+  });
+
+  clearBtn.addEventListener('click', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    resetDrop(drop);
+  });
+
+  ['dragenter','dragover'].forEach(evt => {
+    drop.addEventListener(evt, e => {
+      e.preventDefault(); e.stopPropagation();
+      drop.classList.add('dragging');
+    });
+  });
+  ['dragleave','drop'].forEach(evt => {
+    drop.addEventListener(evt, e => {
+      e.preventDefault(); e.stopPropagation();
+      drop.classList.remove('dragging');
+    });
+  });
+  drop.addEventListener('drop', e => {
+    const files = e.dataTransfer && e.dataTransfer.files;
+    if (!files || !files[0]) return;
+    const file = files[0];
+    if (!file.name.toLowerCase().endsWith('.epub')) {
+      alert('Please drop an .epub file.');
+      return;
+    }
+    // assign dropped file to the input via DataTransfer
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    input.files = dt.files;
+    showFile(drop, file);
+  });
+});
+
+// Prevent the whole window from navigating away when a file is dropped outside a drop zone
+['dragover','drop'].forEach(evt => {
+  window.addEventListener(evt, e => {
+    if (!e.target.closest('[data-drop]')) {
+      e.preventDefault();
+      if (evt === 'drop') e.dataTransfer.dropEffect = 'none';
+    }
+  });
+});
+</script>
+
 </body>
 </html>
