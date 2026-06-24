@@ -14,7 +14,7 @@
       continuation of one started on the previous page, fall back to
       either:
         (a) prefix/suffix-hashed entries stored alongside the full-para
-            entry in rosetta-aligned.json
+            entry in parallel-aligned.json
         (b) substring scan over by_hash keys (slow but works)
         (c) read full paragraph via xpointer expansion before hashing
 

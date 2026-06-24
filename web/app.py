@@ -199,7 +199,7 @@ async def _run_pipeline(job_id: str, api_key: str, mode: str, llm: bool, base_ur
                 j["status"] = "failed"
                 return
 
-            # Post-process: produce rosetta-aligned.json + bundled zip
+            # Post-process: produce parallel-aligned.json + bundled zip
             await _post_process(j, log_path)
             j["status"] = "done"
         except Exception as e:
@@ -208,12 +208,12 @@ async def _run_pipeline(job_id: str, api_key: str, mode: str, llm: bool, base_ur
 
 
 async def _post_process(j: dict, log_path: Path):
-    """Emit rosetta-aligned.json + bundle everything into a zip."""
+    """Emit parallel-aligned.json + bundle everything into a zip."""
     workdir = j["dir"]
     orig_jsonl  = workdir / "book_orig.jsonl"
     trans_jsonl = workdir / "book_trans.jsonl"
     align_final = workdir / "book_final.jsonl"
-    rosetta_json = workdir / "rosetta-aligned.json"
+    rosetta_json = workdir / "parallel-aligned.json"
     bundle_zip   = workdir / "paraligilo-output.zip"
 
     if align_final.exists() and orig_jsonl.exists() and trans_jsonl.exists():
@@ -242,7 +242,7 @@ async def _post_process(j: dict, log_path: Path):
     with zipfile.ZipFile(bundle_zip, "w", zipfile.ZIP_DEFLATED) as zf:
         for src in (align_final, rosetta_json, sample_md, log_path):
             if src.exists():
-                arcname = "rosetta-aligned.json" if src == rosetta_json else \
+                arcname = "parallel-aligned.json" if src == rosetta_json else \
                           "alignment.jsonl" if src == align_final else \
                           "sample.md" if src == sample_md else "run.log"
                 zf.write(src, arcname=arcname)
@@ -416,13 +416,10 @@ async def download(request: Request, job_id: str, kind: str):
         return FileResponse(f, filename=f"{slug}-alignment.jsonl",
                             media_type="application/x-ndjson")
     if kind == "rosetta":
-        f = j["dir"] / "rosetta-aligned.json"
+        f = j["dir"] / "parallel-aligned.json"
         if not f.exists():
-            raise HTTPException(500, "rosetta-aligned.json missing")
-        # NOTE: Rosetta plugin requires the file to be named exactly
-        # 'rosetta-aligned.json' once placed in <book>.sdr/, so keep the
-        # download filename canonical even when a slug is set.
-        return FileResponse(f, filename="rosetta-aligned.json",
+            raise HTTPException(500, "parallel-aligned.json missing")
+        return FileResponse(f, filename="parallel-aligned.json",
                             media_type="application/json")
     if kind == "zip":
         f = j["dir"] / "paraligilo-output.zip"

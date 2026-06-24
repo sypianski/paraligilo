@@ -6,7 +6,7 @@ with confidence scores. Handles m:n alignments (1:1, 1:2, 2:1, 2:2, 1:0,
 0:1) — translators routinely split or merge sentences, and pretending
 otherwise breaks the alignment.
 
-Primary consumer is the [rosetta KOReader plugin](https://github.com/sypianski/koreader-konfig/tree/master/koplugins/rosetta.koplugin)
+Primary consumer is the [rosetta KOReader plugin](https://github.com/sypianski/koreader-rosetta)
 which shows the aligned human translation in a panel beneath the original
 text — see `emit_rosetta.py` for the post-processing step that converts a
 paraligilo alignment into the JSON format rosetta loads from a book's
@@ -127,14 +127,14 @@ All flags:
     --src-lang it --tgt-lang pl \
     --src-file orig.epub --tgt-file trans.epub \
     --method hybrid \
-    -o /path/to/orig.epub.sdr/rosetta-aligned.json
+    -o /path/to/orig.epub.sdr/parallel-aligned.json
 ```
 
 Copy the resulting `.sdr/` directory (Syncthing or USB) to your eink
-reader. Rosetta loads `rosetta-aligned.json` automatically and serves the
+reader. Rosetta loads `parallel-aligned.json` automatically and serves the
 human translation paragraph-by-paragraph instead of calling AI.
 
-Schema: see `ANCHOR_FORMAT.md` in the rosetta repo.
+Schema: [parallel-align-spec](https://github.com/sypianski/parallel-align-spec).
 
 ## Individual stages
 
