@@ -10,40 +10,99 @@
 <style>
   /* paraligilo: minimal additions on top of sypian.ski styles.css */
 
-  /* file drop rows — same hairline frame as .project-card */
+  /* file drop — manuscript-page register */
+  .drops { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin: 1rem 0 1.5rem; }
+  @media (max-width: 640px) { .drops { grid-template-columns: 1fr; } }
+
   .drop {
     position: relative;
-    display: grid;
-    grid-template-columns: 2rem 1fr auto;
-    align-items: center; column-gap: 0.875rem;
-    padding: 0.75rem 0;
-    border-bottom: 1px solid var(--rule);
-    cursor: pointer;
-    color: var(--ink);
+    background: var(--bg-alt);
+    padding: 1.4rem 1.25rem 1.25rem;
+    cursor: pointer; color: var(--ink);
+    transition: background .15s, box-shadow .15s, transform .12s;
+    /* hand-drawn-looking double rule with gold inner */
+    box-shadow:
+      inset 0 0 0 1px var(--rule),
+      inset 0 0 0 4px var(--bg-alt),
+      inset 0 0 0 5px var(--rule);
+  }
+  .drop:hover {
+    background: var(--bg);
+    box-shadow:
+      inset 0 0 0 1px var(--accent),
+      inset 0 0 0 4px var(--bg),
+      inset 0 0 0 5px var(--accent);
+    transform: translateY(-1px);
+  }
+  .drop.dragging {
+    background: var(--bg);
+    box-shadow:
+      inset 0 0 0 2px var(--accent),
+      inset 0 0 0 5px var(--bg),
+      inset 0 0 0 6px var(--accent);
+  }
+  .drop.has-file {
+    background: var(--bg);
+    box-shadow:
+      inset 0 0 0 1px var(--accent-soft),
+      inset 0 0 0 4px var(--bg),
+      inset 0 0 0 5px var(--accent-soft);
+  }
+
+  .drop .drop-numeral {
+    font-family: var(--font-display); font-style: italic;
+    color: var(--accent); font-size: 1.2rem;
+    margin-bottom: 0.4rem; line-height: 1;
+    text-transform: lowercase; letter-spacing: 0.02em;
+    display: flex; align-items: baseline; gap: 0.5rem;
+  }
+  .drop .drop-numeral::after {
+    content: ''; flex: 1; height: 1px; background: var(--rule);
+    align-self: center; margin-left: 0.4rem;
+  }
+  .drop .drop-role {
+    font-family: var(--font-display); font-size: 1.05rem;
+    color: var(--ink); display: block; margin-bottom: 0.3rem;
+  }
+  .drop .drop-ico {
+    color: var(--ink-mute); display: inline-block;
+    vertical-align: -4px; margin-right: 0.4rem;
     transition: color .15s;
   }
-  .drop:first-of-type { border-top: 1px solid var(--rule); }
-  .drop .drop-ico { color: var(--ink-mute); display: flex; }
-  .drop:hover { color: var(--accent-dark); }
-  .drop:hover .drop-ico, .drop.has-file .drop-ico { color: var(--accent-dark); }
-  .drop.dragging { color: var(--accent-dark); background: var(--bg-alt); }
-  .drop .drop-text {
-    font-family: var(--font-body); font-size: 1rem; line-height: 1.4;
+  .drop:hover .drop-ico, .drop.has-file .drop-ico,
+  .drop.dragging .drop-ico { color: var(--accent-dark); }
+  .drop .drop-prompt {
+    font-family: var(--font-body); font-size: 0.95rem;
+    color: var(--ink-soft); line-height: 1.4;
+    display: inline;
   }
-  .drop .drop-text .em { color: var(--accent-dark); text-decoration: underline; text-underline-offset: 2px; }
-  .drop .drop-name { color: var(--ink); font-family: var(--font-display); }
-  .drop .drop-meta { font-size: 0.82rem; color: var(--ink-mute); font-style: italic; margin-left: 0.5rem; }
+  .drop .drop-prompt .em {
+    color: var(--accent-dark);
+    border-bottom: 1px solid currentColor; padding-bottom: 1px;
+  }
+  .drop .drop-name {
+    font-family: var(--font-display); font-size: 1rem;
+    color: var(--ink); display: block; word-break: break-all;
+    margin-top: 0.2rem;
+  }
+  .drop .drop-meta {
+    font-size: 0.82rem; color: var(--ink-mute);
+    font-style: italic; display: inline-block; margin-top: 0.2rem;
+  }
   .drop input[type=file] {
     position: absolute; inset: 0; opacity: 0; cursor: pointer;
-    width: 100%; height: 100%;
+    width: 100%; height: 100%; z-index: 1;
   }
   .drop .drop-clear {
-    color: var(--ink-mute); font-size: 1.15rem; line-height: 1;
-    padding: 0.2rem 0.4rem; opacity: 0;
+    position: absolute; top: 0.5rem; right: 0.6rem;
+    color: var(--ink-mute); font-size: 1.2rem; line-height: 1;
+    padding: 0.15rem 0.4rem; opacity: 0;
     transition: opacity .15s, color .15s; z-index: 2;
+    background: var(--bg-alt); border-radius: 50%;
+    width: 22px; height: 22px; text-align: center;
   }
   .drop.has-file .drop-clear { opacity: 1; }
-  .drop .drop-clear:hover { color: var(--ink); }
+  .drop .drop-clear:hover { color: var(--ink); background: var(--bg); }
 
   /* mode picker — also .project-card visual */
   .modes { margin: 1rem 0 1.5rem; }
@@ -159,23 +218,29 @@
 
 <form action="{{ request.url_for('start_align') }}" method="post" enctype="multipart/form-data">
 
-  <label class="drop" data-drop>
-    <span class="drop-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
-    <span class="drop-text">
-      <span class="drop-prompt">Original — drop EPUB here, or <span class="em">browse</span>.</span>
-    </span>
-    <span class="drop-clear" title="Remove">×</span>
-    <input type="file" name="orig" accept=".epub" required>
-  </label>
+  <div class="drops">
+    <label class="drop" data-drop data-role="Original">
+      <span class="drop-numeral">i.</span>
+      <span class="drop-role">Original</span>
+      <span>
+        <span class="drop-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
+        <span class="drop-prompt">Drop EPUB here, or <span class="em">browse</span></span>
+      </span>
+      <span class="drop-clear" title="Remove">×</span>
+      <input type="file" name="orig" accept=".epub" required>
+    </label>
 
-  <label class="drop" data-drop>
-    <span class="drop-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
-    <span class="drop-text">
-      <span class="drop-prompt">Translation — drop the same book in another language, or <span class="em">browse</span>.</span>
-    </span>
-    <span class="drop-clear" title="Remove">×</span>
-    <input type="file" name="trans" accept=".epub" required>
-  </label>
+    <label class="drop" data-drop data-role="Translation">
+      <span class="drop-numeral">ii.</span>
+      <span class="drop-role">Translation</span>
+      <span>
+        <span class="drop-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
+        <span class="drop-prompt">Drop the translation here, or <span class="em">browse</span></span>
+      </span>
+      <span class="drop-clear" title="Remove">×</span>
+      <input type="file" name="trans" accept=".epub" required>
+    </label>
+  </div>
 
   <div class="modes">
     <label class="mode-row">
@@ -254,31 +319,31 @@ function fmtBytes(n) {
 }
 function showFile(drop, file) {
   drop.classList.add('has-file');
-  drop.querySelector('.drop-prompt').innerHTML =
+  const prompt = drop.querySelector('.drop-prompt');
+  prompt.innerHTML =
     '<span class="drop-name"></span><span class="drop-meta"></span>';
-  drop.querySelector('.drop-name').textContent = file.name;
-  drop.querySelector('.drop-meta').textContent = fmtBytes(file.size);
+  prompt.querySelector('.drop-name').textContent = file.name;
+  prompt.querySelector('.drop-meta').textContent = fmtBytes(file.size);
 }
-function resetDrop(drop, label) {
+function resetDrop(drop, initialPrompt) {
   drop.classList.remove('has-file');
   const input = drop.querySelector('input[type=file]');
   input.value = '';
-  drop.querySelector('.drop-prompt').innerHTML =
-    label + ' — drop EPUB here, or <span class="em">browse</span>.';
+  drop.querySelector('.drop-prompt').innerHTML = initialPrompt;
 }
 
 document.querySelectorAll('[data-drop]').forEach(drop => {
   const input = drop.querySelector('input[type=file]');
   const clearBtn = drop.querySelector('.drop-clear');
-  const initialLabel = drop.querySelector('.drop-prompt').textContent.split(' — ')[0];
+  const initialPrompt = drop.querySelector('.drop-prompt').innerHTML;
 
   input.addEventListener('change', () => {
     if (input.files && input.files[0]) showFile(drop, input.files[0]);
-    else resetDrop(drop, initialLabel);
+    else resetDrop(drop, initialPrompt);
   });
   clearBtn.addEventListener('click', (e) => {
     e.preventDefault(); e.stopPropagation();
-    resetDrop(drop, initialLabel);
+    resetDrop(drop, initialPrompt);
   });
 
   ['dragenter','dragover'].forEach(evt => {
