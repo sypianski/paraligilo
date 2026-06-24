@@ -218,6 +218,11 @@
 
 <form action="{{ request.url_for('start_align') }}" method="post" enctype="multipart/form-data">
 
+  <div class="field">
+    <label class="lbl">Book title <span class="hint">optional — used to name the downloads</span></label>
+    <input type="text" name="book_name" maxlength="80" placeholder="e.g. marta-orzeszkowa">
+  </div>
+
   <div class="drops">
     <label class="drop" data-drop data-role="Original">
       <span class="drop-numeral">i.</span>

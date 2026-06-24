@@ -14,15 +14,26 @@ Or:   uvicorn web.app:app --reload
 import asyncio
 import json
 import os
+import re
 import secrets
 import shutil
 import subprocess
 import sys
 import time
+import unicodedata
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
+
+
+def slugify(text: str, fallback: str = "paraligilo-output") -> str:
+    """ASCII-fold + kebab-case, fallback if empty."""
+    text = unicodedata.normalize("NFKD", text or "")
+    text = "".join(c for c in text if not unicodedata.combining(c))
+    text = text.encode("ascii", "ignore").decode("ascii")
+    text = re.sub(r"[^A-Za-z0-9]+", "-", text).strip("-").lower()
+    return text[:60] or fallback
 
 from fastapi import FastAPI, Form, HTTPException, Request, UploadFile, File
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
@@ -279,6 +290,7 @@ async def start_align(
     request: Request,
     orig: UploadFile = File(...),
     trans: UploadFile = File(...),
+    book_name: str = Form(""),
     mode: str = Form("deterministic"),
     api_key: str = Form(""),
     base_url: str = Form(""),
@@ -324,6 +336,11 @@ async def start_align(
     await _save_upload(orig, orig_path)
     await _save_upload(trans, trans_path)
 
+    # Slug for download filenames. Prefer the user-typed book name; fall back
+    # to the original EPUB's filename stem; then the generic.
+    slug = slugify(book_name) if book_name.strip() else \
+           slugify(Path(orig.filename).stem)
+
     JOBS[job_id] = {
         "id": job_id,
         "dir": jdir,
@@ -331,6 +348,8 @@ async def start_align(
         "trans_path": trans_path,
         "orig_name": orig.filename,
         "trans_name": trans.filename,
+        "book_name": book_name.strip(),
+        "slug": slug,
         "mode": mode,
         "status": "queued",
         "created_at": time.time(),
@@ -389,32 +408,36 @@ async def download(request: Request, job_id: str, kind: str):
         raise HTTPException(404, "unknown job")
     if j["status"] != "done":
         raise HTTPException(409, f"job not done yet (status={j['status']})")
+    slug = j.get("slug", "paraligilo-output")
     if kind == "alignment":
         f = _final_jsonl(j)
         if not f:
             raise HTTPException(500, "alignment missing")
-        return FileResponse(f, filename="alignment.jsonl",
+        return FileResponse(f, filename=f"{slug}-alignment.jsonl",
                             media_type="application/x-ndjson")
     if kind == "rosetta":
         f = j["dir"] / "rosetta-aligned.json"
         if not f.exists():
             raise HTTPException(500, "rosetta-aligned.json missing")
+        # NOTE: Rosetta plugin requires the file to be named exactly
+        # 'rosetta-aligned.json' once placed in <book>.sdr/, so keep the
+        # download filename canonical even when a slug is set.
         return FileResponse(f, filename="rosetta-aligned.json",
                             media_type="application/json")
     if kind == "zip":
         f = j["dir"] / "paraligilo-output.zip"
         if not f.exists():
             raise HTTPException(500, "zip missing")
-        return FileResponse(f, filename="paraligilo-output.zip",
+        return FileResponse(f, filename=f"{slug}.zip",
                             media_type="application/zip")
     if kind == "sample":
         f = j["dir"] / "book_sample.md"
         if not f.exists():
             raise HTTPException(500, "sample missing")
-        return FileResponse(f, filename="sample.md", media_type="text/markdown")
+        return FileResponse(f, filename=f"{slug}-sample.md", media_type="text/markdown")
     if kind == "log":
         f = j["dir"] / "run.log"
-        return FileResponse(f, filename="run.log", media_type="text/plain")
+        return FileResponse(f, filename=f"{slug}-run.log", media_type="text/plain")
     raise HTTPException(400, "unknown download kind")
 
 
