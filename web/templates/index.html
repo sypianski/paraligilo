@@ -1,657 +1,170 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>paraligilo — sentence-level bitext alignment for EPUB</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..900,0..100,0..1&family=EB+Garamond:ital,wght@0,400..800;1,400..700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>paraligilo — sentence-level EPUB alignment</title>
+<meta name="description" content="Align an EPUB and its translation at sentence level. Free deterministic mode, optional AI mode with OpenAI embeddings.">
+<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="stylesheet" href="https://sypian.ski/styles.css?v=8">
 <style>
-  :root {
-    --paper:        #f4ede0;
-    --paper-warm:   #ede4d2;
-    --paper-deep:   #e2d6bd;
-    --ink:          #1a1614;
-    --ink-soft:     #3d342c;
-    --ink-mute:     #6b5d4f;
-    --rule:         #c9bf9f;
-    --blood:        #7a1e1e;
-    --blood-deep:   #5a1010;
-    --gold:         #b08c3a;
+  /* paraligilo additions, in the scriptorium register */
+  form.align-form { margin: 1rem 0 2rem; }
+  form.align-form .row { margin-bottom: 1.25rem; }
+  form.align-form label.lbl {
+    display: block;
+    font-family: var(--font-display);
+    font-size: 1rem; color: var(--ink-soft);
+    margin-bottom: 0.35rem;
   }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; background: var(--paper); color: var(--ink); }
-  body {
-    font-family: 'EB Garamond', 'Iowan Old Style', Palatino, serif;
-    font-size: 19px; line-height: 1.55;
-    background-image:
-      radial-gradient(circle at 12% 18%, rgba(176, 140, 58, 0.06), transparent 40%),
-      radial-gradient(circle at 88% 82%, rgba(122, 30, 30, 0.05), transparent 40%);
-    min-height: 100vh;
+  form.align-form label.lbl .hint {
+    color: var(--ink-mute); font-style: italic; font-size: 0.9rem; margin-left: 0.5rem;
   }
-  /* paper grain */
-  body::before {
-    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.1  0 0 0 0 0.09  0 0 0 0 0.08  0 0 0 0.045 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
-    mix-blend-mode: multiply; opacity: .55;
+  form.align-form input[type=file],
+  form.align-form input[type=password],
+  form.align-form input[type=text] {
+    width: 100%;
+    padding: 0.55rem 0.7rem;
+    background: var(--bg-alt);
+    border: 1px solid var(--rule);
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+    color: var(--ink);
+    border-radius: 2px;
   }
-  main { position: relative; z-index: 1; }
-
-  /* ── colophon strip ─────────────────────────────────── */
-  .colophon {
-    border-bottom: 1px solid var(--rule);
-    padding: 14px 32px;
-    display: flex; justify-content: space-between; align-items: baseline;
-    font: 11px/1 'JetBrains Mono', monospace;
-    text-transform: uppercase; letter-spacing: .18em;
-    color: var(--ink-mute);
+  form.align-form input[type=file] { padding: 0.4rem; }
+  form.align-form input[type=password]:focus,
+  form.align-form input[type=text]:focus {
+    outline: none; border-color: var(--accent);
   }
-  .colophon .lang-strip { display: flex; gap: 20px; }
-  .colophon .lang-strip span { transition: color .2s; }
-  .colophon .lang-strip span:hover { color: var(--blood); cursor: default; }
-
-  /* ── masthead ───────────────────────────────────────── */
-  .masthead {
-    max-width: 1120px; margin: 0 auto; padding: 56px 32px 0;
-    display: grid; grid-template-columns: 1fr; gap: 28px;
+  .modes { display: flex; gap: 1rem; flex-wrap: wrap; }
+  .mode { flex: 1 1 16rem; }
+  .mode label {
+    display: block; cursor: pointer;
+    background: var(--bg-alt); border: 1px solid var(--rule);
+    padding: 0.8rem 1rem; border-radius: 2px;
+    transition: border-color .15s;
   }
-  .eyebrow {
-    font: 12px/1 'JetBrains Mono', monospace;
-    text-transform: uppercase; letter-spacing: .32em;
-    color: var(--blood); margin: 0 0 16px;
-    display: flex; align-items: center; gap: 14px;
-  }
-  .eyebrow::before, .eyebrow::after {
-    content: ''; flex: 1; height: 1px; background: var(--rule);
-  }
-
-  h1.title {
-    font-family: 'Fraunces', serif;
-    font-variation-settings: "opsz" 144, "SOFT" 100, "WONK" 1;
-    font-weight: 320;
-    font-size: clamp(72px, 13vw, 168px);
-    line-height: .88;
-    letter-spacing: -0.045em;
-    margin: 0;
+  .mode label:hover { border-color: var(--ink-mute); }
+  .mode input[type=radio] { display: none; }
+  .mode input[type=radio]:checked + .mode-body {
     color: var(--ink);
   }
-  h1.title em {
-    font-style: italic; font-weight: 280;
-    font-variation-settings: "opsz" 144, "SOFT" 100, "WONK" 1;
-    color: var(--blood);
+  .mode label:has(input:checked) {
+    border-color: var(--accent);
+    background: var(--bg);
   }
-
-  .dek {
-    font-family: 'EB Garamond', serif;
-    font-style: italic; font-size: 22px; line-height: 1.45;
-    color: var(--ink-soft); max-width: 620px;
-    margin-top: 8px;
+  .mode-name { font-family: var(--font-display); font-size: 1.05rem; display: block; margin-bottom: 0.2rem; }
+  .mode-meta { font-size: 0.85rem; color: var(--ink-mute); font-style: italic; }
+  .mode-blurb { font-size: 0.92rem; color: var(--ink-soft); margin-top: 0.4rem; line-height: 1.45; }
+  #ai-only { display: none; margin-top: 1rem; padding: 1rem; background: var(--bg-alt); border-left: 2px solid var(--accent); }
+  body:has(#mode-ai:checked) #ai-only { display: block; }
+  .check { display: flex; align-items: flex-start; gap: 0.6rem; margin-top: 0.6rem; }
+  .check input[type=checkbox] { margin-top: 0.3rem; }
+  .check label { font-size: 0.92rem; color: var(--ink-soft); cursor: pointer; }
+  button.go {
+    background: var(--ink); color: var(--bg);
+    border: none; padding: 0.7rem 1.6rem;
+    font-family: var(--font-display); font-size: 1rem;
+    cursor: pointer; border-radius: 2px;
+    transition: background .15s;
   }
-  .dek strong { font-weight: 600; font-style: normal; color: var(--ink); }
-
-  /* ── bilingual mirror sample ────────────────────────── */
-  .mirror {
-    max-width: 1120px; margin: 64px auto 0; padding: 0 32px;
-  }
-  .mirror-frame {
-    border-top: 2px solid var(--ink);
-    border-bottom: 1px solid var(--rule);
-    padding: 28px 0 32px;
-    display: grid; grid-template-columns: 1fr auto 1fr; gap: 0;
-    align-items: stretch;
-  }
-  .mirror-side { padding: 0 28px; position: relative; min-height: 86px; }
-  .mirror-side .lang-tag {
-    font: 11px/1 'JetBrains Mono', monospace;
-    text-transform: uppercase; letter-spacing: .22em;
-    color: var(--ink-mute); margin-bottom: 14px;
-    display: flex; align-items: center; gap: 8px;
-  }
-  .mirror-side .lang-tag::before {
-    content: ''; width: 8px; height: 8px; background: var(--blood); border-radius: 50%;
-  }
-  .mirror-side .line {
-    font-family: 'EB Garamond', serif;
-    font-size: 21px; line-height: 1.4; color: var(--ink);
-    opacity: 0; animation: typeIn 1.4s ease-out forwards;
-  }
-  .mirror-side.left  .line { animation-delay: .3s; }
-  .mirror-side.right .line { animation-delay: 1.2s; }
-  .mirror-rule {
-    width: 1px; background: var(--rule); position: relative;
-    align-self: stretch;
-  }
-  .mirror-rule::after {
-    content: '≈'; position: absolute;
-    top: 50%; left: 50%; transform: translate(-50%, -50%);
-    font-family: 'Fraunces', serif; font-size: 28px;
-    background: var(--paper); padding: 4px 8px;
-    color: var(--gold); font-weight: 300;
-  }
-  @keyframes typeIn {
-    from { opacity: 0; transform: translateY(8px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
-  .mirror-caption {
-    font: 11px/1.4 'JetBrains Mono', monospace;
-    text-transform: uppercase; letter-spacing: .2em;
-    color: var(--ink-mute); text-align: center;
-    margin-top: 18px;
-  }
-  .mirror-caption .conf { color: var(--blood); font-weight: 600; }
-
-  /* ── form ────────────────────────────────────────────── */
-  .compose {
-    max-width: 1120px; margin: 88px auto 0; padding: 0 32px;
-    display: grid; grid-template-columns: 220px 1fr; gap: 64px;
-  }
-  .compose .section-head {
-    font-family: 'Fraunces', serif;
-    font-weight: 380; font-style: italic;
-    font-variation-settings: "opsz" 144, "SOFT" 50;
-    font-size: 32px; line-height: 1.05; color: var(--ink);
-    letter-spacing: -0.01em;
-    border-top: 2px solid var(--ink); padding-top: 16px;
-    position: sticky; top: 24px; align-self: start;
-  }
-  .compose .section-head .num {
-    display: block;
-    font: 12px/1 'JetBrains Mono', monospace;
-    text-transform: uppercase; letter-spacing: .28em;
-    color: var(--blood); margin-bottom: 12px;
-  }
-
-  form.manuscript { display: flex; flex-direction: column; gap: 36px; }
-
-  .field { display: block; }
-  .field-label {
-    font: 12px/1 'JetBrains Mono', monospace;
-    text-transform: uppercase; letter-spacing: .22em;
-    color: var(--ink-mute); margin-bottom: 10px;
-    display: flex; align-items: baseline; gap: 12px;
-  }
-  .field-label .roman {
-    font-family: 'Fraunces', serif; font-size: 18px; font-weight: 500;
-    font-style: normal; color: var(--blood);
-    text-transform: none; letter-spacing: -0.01em;
-  }
-  .field-hint {
-    font-family: 'EB Garamond', serif; font-style: italic;
-    font-size: 16px; color: var(--ink-mute);
-    text-transform: none; letter-spacing: 0;
-    margin-left: auto;
-  }
-
-  /* file input as upload card */
-  .file-card {
-    border: 1px solid var(--rule);
-    background: var(--paper-warm);
-    padding: 22px 26px;
-    transition: all .15s ease;
-    cursor: pointer; position: relative;
-  }
-  .file-card:hover { border-color: var(--ink); background: var(--paper-deep); }
-  .file-card input[type=file] {
-    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
-  }
-  .file-card .filename {
-    font-family: 'EB Garamond', serif; font-size: 18px;
-    color: var(--ink); display: block;
-  }
-  .file-card .filename.empty { color: var(--ink-mute); font-style: italic; }
-  .file-card .meta {
-    font: 11px/1 'JetBrains Mono', monospace;
-    color: var(--ink-mute); margin-top: 6px;
-    text-transform: uppercase; letter-spacing: .15em;
-  }
-
-  /* mode picker */
-  .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .mode-card {
-    border: 1px solid var(--rule);
-    background: var(--paper-warm);
-    padding: 26px 24px;
-    cursor: pointer; position: relative;
-    transition: all .15s ease;
-  }
-  .mode-card:hover { border-color: var(--ink-soft); }
-  .mode-card input[type=radio] { position: absolute; opacity: 0; }
-  .mode-card .mode-name {
-    font-family: 'Fraunces', serif;
-    font-weight: 500; font-size: 28px;
-    line-height: 1; margin: 0 0 8px;
-    letter-spacing: -0.02em;
-  }
-  .mode-card .mode-name em {
-    font-style: italic; color: var(--blood);
-    font-variation-settings: "opsz" 144, "WONK" 1;
-  }
-  .mode-card .mode-byline {
-    font: 11px/1 'JetBrains Mono', monospace;
-    color: var(--ink-mute); margin-bottom: 14px;
-    text-transform: uppercase; letter-spacing: .2em;
-  }
-  .mode-card .mode-blurb {
-    font-family: 'EB Garamond', serif;
-    font-style: italic; font-size: 16px;
-    color: var(--ink-soft); line-height: 1.4;
-  }
-  .mode-card:has(input:checked) {
-    background: var(--paper-deep);
-    border-color: var(--ink);
-    box-shadow: 4px 4px 0 var(--ink);
-    transform: translate(-2px, -2px);
-  }
-  .mode-card:has(input:checked) .mode-name em { color: var(--blood-deep); }
-
-  /* ai-only block — slides in */
-  #ai-only {
-    overflow: hidden; max-height: 0; opacity: 0;
-    transition: max-height .3s ease, opacity .25s ease;
-  }
-  body:has(#mode-ai:checked) #ai-only {
-    max-height: 460px; opacity: 1;
-  }
-  #ai-only > .field { margin-top: 28px; }
-
-  input[type=password], input[type=text] {
-    width: 100%; padding: 14px 16px;
-    border: 1px solid var(--rule); background: var(--paper-warm);
-    font: 16px/1 'JetBrains Mono', monospace;
-    color: var(--ink); outline: none; border-radius: 0;
-  }
-  input[type=password]:focus, input[type=text]:focus {
-    border-color: var(--ink); background: var(--paper);
-  }
-  .checkbox-row { display: flex; align-items: flex-start; gap: 14px; margin-top: 16px; }
-  .checkbox-row input[type=checkbox] {
-    appearance: none; -webkit-appearance: none;
-    width: 22px; height: 22px; margin: 0; flex: 0 0 22px;
-    border: 1px solid var(--ink); background: var(--paper-warm);
-    cursor: pointer; position: relative; top: 2px;
-  }
-  .checkbox-row input[type=checkbox]:checked { background: var(--ink); }
-  .checkbox-row input[type=checkbox]:checked::after {
-    content: '✓'; position: absolute; top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
-    color: var(--paper); font-size: 16px; font-weight: bold; line-height: 1;
-  }
-  .checkbox-row label {
-    font-family: 'EB Garamond', serif; font-size: 17px; line-height: 1.4;
-    color: var(--ink-soft); cursor: pointer;
-  }
-
-  /* submit */
-  .imprint-row {
-    margin-top: 16px; padding-top: 28px;
-    border-top: 1px solid var(--rule);
-    display: flex; align-items: center; justify-content: space-between; gap: 24px;
-  }
-  button.imprint {
-    background: var(--ink); color: var(--paper);
-    border: none; padding: 22px 44px;
-    font-family: 'Fraunces', serif; font-weight: 500;
-    font-variation-settings: "opsz" 144, "SOFT" 0, "WONK" 0;
-    font-size: 22px; line-height: 1;
-    cursor: pointer; letter-spacing: .02em;
-    transition: all .12s ease; border-radius: 0;
-    position: relative;
-  }
-  button.imprint::after {
-    content: '⇢'; margin-left: 14px;
-    font-family: 'JetBrains Mono', monospace; font-size: 22px;
-    color: var(--gold); font-weight: 400;
-    transition: transform .15s ease;
-    display: inline-block;
-  }
-  button.imprint:hover { background: var(--blood); color: var(--paper); }
-  button.imprint:hover::after { transform: translateX(4px); color: var(--paper-warm); }
-  .legal {
-    font: 11px/1.4 'JetBrains Mono', monospace;
-    text-transform: uppercase; letter-spacing: .18em;
-    color: var(--ink-mute); text-align: right;
-    max-width: 260px;
-  }
-
-  /* ── warning block ──────────────────────────────────── */
-  .marginalia {
-    max-width: 1120px; margin: 72px auto 0; padding: 0 32px;
-  }
-  .warn-card {
-    background: var(--paper-warm);
-    border-left: 4px solid var(--blood);
-    padding: 22px 28px;
-    display: grid; grid-template-columns: auto 1fr; gap: 22px; align-items: start;
-  }
-  .warn-card .glyph {
-    font-family: 'Fraunces', serif; font-style: italic;
-    font-size: 56px; line-height: .8; color: var(--blood);
-    font-variation-settings: "opsz" 144, "WONK" 1;
-  }
-  .warn-card .copy { font-family: 'EB Garamond', serif; font-size: 17px; line-height: 1.5; color: var(--ink-soft); }
-  .warn-card .copy strong { color: var(--ink); font-weight: 600; }
-
-  /* ── metrics / quality strip ────────────────────────── */
-  .ledger {
-    max-width: 1120px; margin: 88px auto 0; padding: 0 32px;
-    display: grid; grid-template-columns: repeat(4, 1fr);
-    gap: 1px; background: var(--rule);
-    border-top: 2px solid var(--ink); border-bottom: 2px solid var(--ink);
-  }
-  .ledger-cell { background: var(--paper); padding: 28px 22px; }
-  .ledger-cell .figure {
-    font-family: 'Fraunces', serif; font-weight: 400;
-    font-variation-settings: "opsz" 144, "SOFT" 50;
-    font-size: 56px; line-height: 1; color: var(--ink);
-    letter-spacing: -0.04em;
-    margin-bottom: 8px;
-  }
-  .ledger-cell .figure .unit {
-    font-size: 22px; color: var(--ink-mute); font-weight: 400;
-    margin-left: 2px;
-  }
-  .ledger-cell .figure em {
-    font-style: italic; color: var(--blood);
-    font-variation-settings: "opsz" 144, "WONK" 1;
-  }
-  .ledger-cell .figure-label {
-    font: 11px/1.4 'JetBrains Mono', monospace;
-    text-transform: uppercase; letter-spacing: .18em;
-    color: var(--ink-mute);
-  }
-  .ledger-cell .figure-sub {
-    font-family: 'EB Garamond', serif; font-style: italic;
-    font-size: 15px; color: var(--ink-soft); margin-top: 6px;
-  }
-
-  /* ── method notes ───────────────────────────────────── */
-  .essay {
-    max-width: 1120px; margin: 88px auto 0; padding: 0 32px;
-    display: grid; grid-template-columns: 220px 1fr; gap: 64px;
-  }
-  .essay .label-col {
-    font: 11px/1.5 'JetBrains Mono', monospace;
-    text-transform: uppercase; letter-spacing: .22em;
-    color: var(--ink-mute);
-    border-top: 1px solid var(--rule); padding-top: 14px;
-  }
-  .essay h3 {
-    font-family: 'Fraunces', serif; font-weight: 400;
-    font-variation-settings: "opsz" 60;
-    font-size: 26px; line-height: 1.15;
-    color: var(--ink); margin: 0 0 14px;
-    letter-spacing: -0.01em;
-  }
-  .essay p {
-    font-family: 'EB Garamond', serif; font-size: 18px; line-height: 1.55;
-    color: var(--ink-soft); margin: 0 0 14px;
-  }
-  .essay p em { font-style: italic; color: var(--ink); }
-  .essay-block + .essay-block { margin-top: 44px; }
-
-  /* ── footer ─────────────────────────────────────────── */
-  footer {
-    max-width: 1120px; margin: 96px auto 0; padding: 36px 32px 60px;
-    border-top: 2px solid var(--ink);
-    display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 18px;
-    font: 11px/1.4 'JetBrains Mono', monospace;
-    text-transform: uppercase; letter-spacing: .2em;
-    color: var(--ink-mute);
-  }
-  footer a { color: var(--blood); text-decoration: none; border-bottom: 1px solid var(--rule); padding-bottom: 1px; }
-  footer a:hover { color: var(--blood-deep); border-color: var(--blood); }
-  footer .ornament {
-    font-family: 'Fraunces', serif; font-size: 24px; color: var(--gold);
-    font-style: italic; letter-spacing: 0;
-    text-transform: none;
-    font-variation-settings: "opsz" 144, "WONK" 1;
-  }
-
-  /* responsive */
-  @media (max-width: 880px) {
-    .compose, .essay { grid-template-columns: 1fr; gap: 28px; }
-    .compose .section-head, .essay .label-col { position: static; }
-    .modes { grid-template-columns: 1fr; }
-    .ledger { grid-template-columns: repeat(2, 1fr); }
-    .mirror-frame { grid-template-columns: 1fr; }
-    .mirror-rule { display: none; }
-    .mirror-side.right { border-top: 1px solid var(--rule); margin-top: 16px; padding-top: 22px; }
-    .imprint-row { flex-direction: column; align-items: stretch; gap: 18px; }
-    .legal { text-align: left; max-width: none; }
-    h1.title { font-size: clamp(56px, 16vw, 100px); }
+  button.go:hover { background: var(--accent-dark); color: var(--bg); }
+  p.fine { color: var(--ink-mute); font-size: 0.85rem; font-style: italic; }
+  p.warn {
+    border-left: 2px solid var(--accent);
+    padding: 0.6rem 0.9rem; background: var(--bg-alt);
+    font-size: 0.95rem;
   }
 </style>
 </head>
 <body>
-
 <main>
 
-<div class="colophon">
-  <span>paraligilo · v. 1 · MMXXVI</span>
-  <div class="lang-strip">
-    <span>EN</span><span>IT</span><span>PL</span><span>FR</span><span>+ 50</span>
+<h1>paraligilo</h1>
+<p>Sentence-level alignment between an EPUB and its translation.</p>
+
+<hr />
+
+<h2>Align two EPUBs</h2>
+
+<p>Upload the original and its translation. You get back a JSONL mapping each source sentence to its counterpart(s), with confidence scores and m:n move types (1:1, 1:2, 2:1, …) reflecting where the translator split or merged sentences. Output expires after 24 hours.</p>
+
+<form class="align-form" action="{{ request.url_for('start_align') }}" method="post" enctype="multipart/form-data">
+
+  <div class="row">
+    <label class="lbl">Original EPUB <span class="hint">the book in its source language</span></label>
+    <input type="file" name="orig" accept=".epub" required>
   </div>
-  <span>AGPL · sypian.ski/paraligilo</span>
-</div>
 
-<header class="masthead">
-  <div>
-    <p class="eyebrow">A workshop for bilingual reading</p>
-    <h1 class="title">par<em>al</em>igil<em>o</em></h1>
-    <p class="dek">
-      Take a book in one language, the same book in another, and produce a precise
-      <strong>sentence-by-sentence map</strong> between them. Free, deterministic, runs in the time it takes
-      to pour a glass. Optionally sharpened by embeddings.
-    </p>
+  <div class="row">
+    <label class="lbl">Translation EPUB <span class="hint">the same book in another language</span></label>
+    <input type="file" name="trans" accept=".epub" required>
   </div>
-</header>
 
-<section class="mirror">
-  <div class="mirror-frame">
-    <div class="mirror-side left">
-      <div class="lang-tag">Polski · sent. 1543</div>
-      <p class="line">Oto jest prawnukiem boskiego Augusta.</p>
-    </div>
-    <div class="mirror-rule"></div>
-    <div class="mirror-side right">
-      <div class="lang-tag">English · sent. 1432</div>
-      <p class="line">He is the great-grandson of the deified Augustus.</p>
-    </div>
-  </div>
-  <p class="mirror-caption">specimen · move <span class="conf">1 : 1</span> · confidence <span class="conf">0.866</span> · Sienkiewicz, <em style="font-style:italic;font-family:'EB Garamond',serif;text-transform:none;letter-spacing:0">Quo Vadis</em></p>
-</section>
-
-<section class="compose">
-  <aside class="section-head">
-    <span class="num">§ I</span>
-    Submit the two manuscripts
-  </aside>
-
-  <form class="manuscript" action="{{ request.url_for('start_align') }}" method="post" enctype="multipart/form-data">
-
-    <div class="field">
-      <div class="field-label">
-        <span class="roman">i.</span> Original
-        <span class="field-hint">— the book in its source language</span>
-      </div>
-      <label class="file-card">
-        <input type="file" name="orig" accept=".epub" required onchange="updateFilename(this)">
-        <span class="filename empty">Choose an EPUB…</span>
-        <span class="meta">accepts .epub · ≤ {{ max_mb }} MB</span>
-      </label>
-    </div>
-
-    <div class="field">
-      <div class="field-label">
-        <span class="roman">ii.</span> Translation
-        <span class="field-hint">— the same book in another language</span>
-      </div>
-      <label class="file-card">
-        <input type="file" name="trans" accept=".epub" required onchange="updateFilename(this)">
-        <span class="filename empty">Choose an EPUB…</span>
-        <span class="meta">accepts .epub · ≤ {{ max_mb }} MB</span>
-      </label>
-    </div>
-
-    <div class="field">
-      <div class="field-label">
-        <span class="roman">iii.</span> Method
-      </div>
-      <div class="modes">
-        <label class="mode-card">
+  <div class="row">
+    <label class="lbl">Method</label>
+    <div class="modes">
+      <div class="mode">
+        <label>
           <input type="radio" name="mode" value="deterministic" checked id="mode-det">
-          <div class="mode-name">Free <em>·</em> deterministic</div>
-          <div class="mode-byline">No key · offline · ≈ 2 s</div>
-          <div class="mode-blurb">
-            Surface-token anchors and classic Gale-Church length DP. 80–90 % precision on faithful
-            translations. Best for first-pass and most classic literature.
+          <div class="mode-body">
+            <span class="mode-name">Free · deterministic</span>
+            <span class="mode-meta">no key, offline, ≈ 2 s</span>
+            <div class="mode-blurb">Surface-token anchors plus classic Gale-Church length DP. 80–90% precision on faithful translations.</div>
           </div>
         </label>
-        <label class="mode-card">
+      </div>
+      <div class="mode">
+        <label>
           <input type="radio" name="mode" value="ai" id="mode-ai">
-          <div class="mode-name"><em>Refined</em> · with AI</div>
-          <div class="mode-byline">OpenAI · ≈ 30 s · $0.10</div>
-          <div class="mode-blurb">
-            Multilingual embeddings plus optional gpt-4o-mini sanity-check. Higher precision
-            on paraphrases and restructured prose. Bring your own API key.
+          <div class="mode-body">
+            <span class="mode-name">AI · embeddings</span>
+            <span class="mode-meta">OpenAI key required, ≈ 30 s, ≈ $0.10</span>
+            <div class="mode-blurb">Multilingual embeddings plus optional gpt-4o-mini sanity-check. Higher precision on paraphrases and restructured prose.</div>
           </div>
         </label>
       </div>
     </div>
+  </div>
 
-    <div id="ai-only">
-      <div class="field">
-        <div class="field-label">
-          <span class="roman">iv.</span> OpenAI key
-          <span class="field-hint">— used to embed sentences; never stored or logged</span>
-        </div>
-        <input type="password" name="api_key" placeholder="sk-…" autocomplete="off">
-
-        {% if has_server_key %}
-        <div class="checkbox-row">
-          <input type="checkbox" name="use_server_key" id="srvkey">
-          <label for="srvkey">Use this site's key instead — rate-limited trial</label>
-        </div>
-        {% endif %}
-
-        <div class="checkbox-row">
-          <input type="checkbox" name="llm" id="llm" checked>
-          <label for="llm">Run honest LLM rescore (+ $0.005, + ~3 min) — labels false alignments truthfully instead of pretending</label>
-        </div>
-      </div>
+  <div id="ai-only">
+    <div class="row">
+      <label class="lbl">OpenAI API key <span class="hint">used only to embed; never stored</span></label>
+      <input type="password" name="api_key" placeholder="sk-..." autocomplete="off">
     </div>
-
-    <div class="imprint-row">
-      <button type="submit" class="imprint">Set in parallel</button>
-      <div class="legal">
-        Files removed after 24 h.<br>
-        No tracking. No key storage.
-      </div>
+    {% if has_server_key %}
+    <div class="check">
+      <input type="checkbox" name="use_server_key" id="srvkey">
+      <label for="srvkey">Use this site's key instead (rate-limited trial).</label>
     </div>
-
-  </form>
-</section>
-
-<aside class="marginalia">
-  <div class="warn-card">
-    <div class="glyph">!</div>
-    <div class="copy">
-      <strong>Verify your pair first.</strong> Two different books by the same author
-      will produce confident-looking nonsense. Skim the produced sample.md before
-      trusting the alignment — a known scene should map to a known scene.
+    {% endif %}
+    <div class="check">
+      <input type="checkbox" name="llm" id="llm" checked>
+      <label for="llm">Run honest LLM rescore (+ ≈ $0.005, + ≈ 3 min) — labels false alignments truthfully rather than pretending.</label>
     </div>
   </div>
-</aside>
 
-<section class="ledger">
-  <div class="ledger-cell">
-    <div class="figure">94<span class="unit">%</span></div>
-    <div class="figure-label">high + medium fidelity</div>
-    <div class="figure-sub">Sienkiewicz <em>Quo Vadis</em>, PL ↔ EN, deterministic</div>
+  <div class="row" style="margin-top: 1.5rem;">
+    <button class="go" type="submit">Align</button>
+    <p class="fine" style="display:inline-block; margin-left:1rem;">Max {{ max_mb }} MB per file.</p>
   </div>
-  <div class="ledger-cell">
-    <div class="figure">86<span class="unit">%</span></div>
-    <div class="figure-label">high + medium fidelity</div>
-    <div class="figure-sub">Tom Segev <em>Seventh Million</em>, EN ↔ IT, with AI</div>
-  </div>
-  <div class="ledger-cell">
-    <div class="figure">8<span class="unit">×</span></div>
-    <div class="figure-label">m : n move types</div>
-    <div class="figure-sub">because translators split and merge sentences</div>
-  </div>
-  <div class="ledger-cell">
-    <div class="figure">$0<span class="unit">.10</span></div>
-    <div class="figure-label">cost in AI mode</div>
-    <div class="figure-sub">paid directly to OpenAI by you</div>
-  </div>
-</section>
+</form>
 
-<section class="essay">
-  <div class="label-col">§ II · Method</div>
-  <div>
-    <div class="essay-block">
-      <h3>Why two modes?</h3>
-      <p>
-        Classical alignment — <em>Gale &amp; Church, 1993</em> — uses nothing more than sentence
-        length. It is fast, free, and on a faithful classic literary translation it lands
-        plainly correct alignments most of the time. The deterministic mode here adds
-        anchor pre-passes (rare proper-noun co-occurrences, dates, numbers, monotonic
-        chains) and then runs that classic DP between anchors with full m:n moves.
-      </p>
-      <p>
-        Where modern translators paraphrase, restructure, drop or add — where lengths
-        diverge — multilingual embeddings catch what surface tokens can't. The AI mode
-        adds a vector-space cost on top, re-embeds concatenated passages where m and n
-        differ, and (optionally) asks gpt-4o-mini to plainly say <em>yes</em>, <em>no</em>, or
-        <em>partial</em> for the residue that still looks ambiguous.
-      </p>
-    </div>
+<p class="warn"><strong>Verify your input pair.</strong> Two different books by the same author produce confident-looking nonsense. Skim the produced sample.md before trusting the alignment.</p>
 
-    <div class="essay-block">
-      <h3>What you get back</h3>
-      <p>
-        A JSONL — one record per aligned pair — with original sentence indices, translation
-        sentence indices, the move type (<code style="font-family:'JetBrains Mono',monospace;font-size:.95em">1:1</code>, <code style="font-family:'JetBrains Mono',monospace;font-size:.95em">1:2</code>, <code style="font-family:'JetBrains Mono',monospace;font-size:.95em">2:1</code>, &c.), a confidence score,
-        and the method used. Plus a sample.md of 100 stratified pairs so you can read across
-        the bands and judge for yourself whether the result is fit for whatever you have in
-        mind for it.
-      </p>
-    </div>
+<h2>Method</h2>
 
-    <div class="essay-block">
-      <h3>What this is for</h3>
-      <p>
-        Parallel reading apps. Bilingual EPUB construction. Language-learning decks. Translation
-        studies. Anything that wants <em>this sentence here</em> to point to <em>that sentence
-        there</em>, in two languages, in a structured way you can build on.
-      </p>
-    </div>
-  </div>
-</section>
+<p>The free mode uses surface anchors — years, numbers, rare proper-noun co-occurrences chained monotonically — then a Gale-Church length-only dynamic-programming alignment with m:n moves between anchors. Classical 1993 technique, no model, no network.</p>
 
-<footer>
-  <span>paraligilo · AGPL-3.0</span>
-  <span class="ornament">·❦·</span>
-  <span>
-    <a href="https://github.com/sypianski/paraligilo">source on github</a>
-  </span>
-</footer>
+<p>The AI mode adds multilingual sentence embeddings (OpenAI <em>text-embedding-3-large</em>) so semantic similarity informs the cost function, then optionally asks <em>gpt-4o-mini</em> to plainly label residual low-confidence pairs as <em>yes</em>, <em>partial</em>, or <em>no</em>. About $0.10 per book paid directly to OpenAI via your key.</p>
+
+<p>Measured on real pairs: 94% high+medium confidence on Sienkiewicz <em>Quo Vadis</em> (PL↔EN, deterministic), 86% on Tom Segev <em>Seventh Million</em> (EN↔IT, AI mode). Translator faithfulness matters more than language pair.</p>
+
+<h2>Source</h2>
+
+<p><a href="https://github.com/sypianski/paraligilo">github.com/sypianski/paraligilo</a> — AGPL-3.0. Built for the <a href="https://github.com/sypianski/koreader-konfig">splitread KOReader plugin</a> but useful for parallel reading apps, bilingual EPUB construction, language-learning decks, translation studies.</p>
 
 </main>
-
-<script>
-function updateFilename(input) {
-  const span = input.parentElement.querySelector('.filename');
-  if (input.files && input.files[0]) {
-    span.textContent = input.files[0].name;
-    span.classList.remove('empty');
-  } else {
-    span.textContent = 'Choose an EPUB…';
-    span.classList.add('empty');
-  }
-}
-</script>
-
 </body>
 </html>

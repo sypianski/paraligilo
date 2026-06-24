@@ -1,213 +1,137 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>paraligilo · job {{ job.id }}</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..900,0..100,0..1&family=EB+Garamond:ital,wght@0,400..800;1,400..700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="stylesheet" href="https://sypian.ski/styles.css?v=8">
 <style>
-  :root {
-    --paper: #f4ede0; --paper-warm: #ede4d2; --paper-deep: #e2d6bd;
-    --ink: #1a1614; --ink-soft: #3d342c; --ink-mute: #6b5d4f;
-    --rule: #c9bf9f; --blood: #7a1e1e; --blood-deep: #5a1010; --gold: #b08c3a;
-    --pending: #b08c3a; --running: #7a1e1e; --done: #2d5a2d; --failed: #5a1010;
+  .status {
+    display: inline-block;
+    padding: 0.15rem 0.6rem;
+    font-family: var(--font-display);
+    font-size: 0.95rem;
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    background: var(--bg-alt);
+    color: var(--ink);
   }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; background: var(--paper); color: var(--ink);
-               font-family: 'EB Garamond', serif; font-size: 18px; line-height: 1.55; min-height: 100vh; }
-  body::before {
-    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.1  0 0 0 0 0.09  0 0 0 0 0.08  0 0 0 0.045 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
-    mix-blend-mode: multiply; opacity: .55;
-  }
-  main { position: relative; z-index: 1; max-width: 900px; margin: 0 auto; padding: 32px; }
-  .crumb {
-    font: 11px/1 'JetBrains Mono', monospace;
-    text-transform: uppercase; letter-spacing: .2em;
-    color: var(--ink-mute); margin-bottom: 28px;
-  }
-  .crumb a { color: var(--blood); text-decoration: none; border-bottom: 1px solid var(--rule); padding-bottom: 1px; }
-  .crumb a:hover { color: var(--blood-deep); border-color: var(--blood); }
-
-  h1 {
-    font-family: 'Fraunces', serif; font-weight: 380; font-style: italic;
-    font-variation-settings: "opsz" 144, "SOFT" 50;
-    font-size: clamp(40px, 6vw, 56px); line-height: 1; margin: 0;
-    letter-spacing: -0.025em; color: var(--ink);
-  }
-  h1 .jobid {
-    font-family: 'JetBrains Mono', monospace; font-size: .55em;
-    font-style: normal; color: var(--ink-mute); margin-left: 16px;
-    letter-spacing: 0; vertical-align: middle;
-  }
-
-  .pane {
-    border-top: 2px solid var(--ink); margin-top: 36px;
-    padding: 28px 0 0;
-  }
-  .status-row {
-    display: flex; align-items: baseline; gap: 22px;
-    margin-bottom: 20px; flex-wrap: wrap;
-  }
-  .status-pill {
-    font-family: 'Fraunces', serif; font-weight: 500; font-style: italic;
-    font-variation-settings: "opsz" 144, "WONK" 1;
-    font-size: 36px; line-height: 1;
-    letter-spacing: -0.025em;
-  }
-  .status-pill.queued, .status-pill.running { color: var(--running); }
-  .status-pill.done    { color: var(--done); }
-  .status-pill.failed  { color: var(--failed); }
-  .status-stage {
-    font: 12px/1 'JetBrains Mono', monospace;
-    text-transform: uppercase; letter-spacing: .25em;
-    color: var(--ink-mute);
-  }
-  .status-stage::before { content: '· '; color: var(--rule); }
-
-  /* progress bar — paper-strip */
+  .status.running, .status.queued { color: var(--accent-dark); border-color: var(--accent); }
+  .status.done { color: #2d5a2d; border-color: #b8c9b8; }
+  .status.failed { color: #8a1a1a; border-color: #c9b8b8; }
+  .stage { color: var(--ink-mute); font-style: italic; margin-left: 0.5rem; font-size: 0.92rem; }
   .progress {
-    height: 6px; background: var(--paper-deep);
-    border: 1px solid var(--rule); position: relative;
-    overflow: hidden; margin: 18px 0 22px;
+    height: 4px; background: var(--bg-alt);
+    border: 1px solid var(--rule); border-radius: 2px;
+    margin: 1rem 0; overflow: hidden;
   }
   .progress-bar {
-    height: 100%; background: var(--blood);
+    height: 100%; background: var(--accent);
     transition: width .4s ease;
   }
-  .status-pill.running ~ .progress-anim .progress-bar {
-    background: linear-gradient(90deg, var(--blood) 0%, var(--gold) 50%, var(--blood) 100%);
+  body:has(.status.running) .progress-bar {
+    background: linear-gradient(90deg, var(--accent) 0%, var(--accent-soft) 50%, var(--accent) 100%);
     background-size: 200% 100%;
     animation: shimmer 1.6s linear infinite;
   }
   @keyframes shimmer {
     from { background-position: 200% 0; } to { background-position: -200% 0; }
   }
-
-  .files {
-    list-style: none; padding: 0; margin: 0 0 16px;
-    display: grid; grid-template-columns: max-content 1fr; gap: 4px 18px;
-    font-family: 'EB Garamond', serif; font-size: 17px;
+  dl.meta { margin: 0.5rem 0; }
+  dl.meta dt {
+    display: inline-block; min-width: 8rem;
+    color: var(--ink-mute); font-size: 0.88rem;
+    font-style: italic;
   }
-  .files .k {
-    font: 11px/1.6 'JetBrains Mono', monospace;
-    text-transform: uppercase; letter-spacing: .2em;
-    color: var(--ink-mute);
+  dl.meta dd {
+    display: inline; margin: 0;
+    color: var(--ink);
   }
-  .files .v { color: var(--ink); font-style: italic; }
-
+  dl.meta dd::after { content: ""; display: block; margin-bottom: 0.25rem; }
   .detail {
-    font: 12px/1.4 'JetBrains Mono', monospace;
-    color: var(--ink-mute); margin-top: 8px;
-    word-break: break-all;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.82rem; color: var(--ink-mute);
+    margin-top: 0.5rem; word-break: break-all;
   }
   .elapsed {
-    font: 11px/1 'JetBrains Mono', monospace;
-    color: var(--ink-mute); margin-top: 12px;
-    text-transform: uppercase; letter-spacing: .2em;
+    font-size: 0.85rem; color: var(--ink-mute);
+    font-style: italic; margin-top: 0.5rem;
   }
-
-  /* downloads */
-  #downloads { display: none; margin-top: 32px; padding-top: 28px; border-top: 1px solid var(--rule); }
-  .dl-grid { display: flex; flex-wrap: wrap; gap: 12px; }
-  a.dl-btn {
-    background: var(--ink); color: var(--paper);
-    padding: 18px 28px; text-decoration: none;
-    font-family: 'Fraunces', serif; font-weight: 500;
-    font-variation-settings: "opsz" 144;
-    font-size: 18px; letter-spacing: .01em;
-    transition: all .12s ease;
-    display: inline-flex; align-items: center; gap: 12px;
+  #downloads { display: none; margin-top: 1.5rem; }
+  #downloads a {
+    display: inline-block; margin-right: 0.5rem; margin-bottom: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: var(--ink); color: var(--bg);
+    text-decoration: none; border-radius: 2px;
+    font-family: var(--font-display); font-size: 0.95rem;
   }
-  a.dl-btn::after { content: '↓'; color: var(--gold); font-family: 'JetBrains Mono', monospace; }
-  a.dl-btn:hover { background: var(--blood); }
-  a.dl-btn:hover::after { color: var(--paper-warm); }
-  a.dl-btn.secondary { background: var(--paper-warm); color: var(--ink); border: 1px solid var(--ink); }
-  a.dl-btn.secondary::after { color: var(--blood); }
-  a.dl-btn.secondary:hover { background: var(--ink); color: var(--paper); }
-  a.dl-btn.secondary:hover::after { color: var(--gold); }
-
-  /* log */
-  details.log-fold {
-    margin-top: 36px; padding-top: 24px;
-    border-top: 1px solid var(--rule);
+  #downloads a.secondary { background: var(--bg-alt); color: var(--ink); border: 1px solid var(--rule); }
+  #downloads a:hover { background: var(--accent-dark); color: var(--bg); }
+  #downloads a.secondary:hover { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  details.logfold { margin-top: 1.5rem; }
+  details.logfold summary {
+    cursor: pointer;
+    font-size: 0.88rem; color: var(--ink-mute);
+    font-style: italic;
   }
-  details.log-fold > summary {
-    cursor: pointer; list-style: none;
-    font: 11px/1 'JetBrains Mono', monospace;
-    text-transform: uppercase; letter-spacing: .22em;
-    color: var(--ink-mute);
-    display: flex; align-items: center; gap: 10px;
-  }
-  details.log-fold > summary::before {
-    content: '▸'; color: var(--blood); transition: transform .15s;
-    display: inline-block;
-  }
-  details.log-fold[open] > summary::before { transform: rotate(90deg); }
   pre.tail {
-    background: var(--ink); color: var(--paper-deep);
-    padding: 22px; margin-top: 14px; border-radius: 0;
-    font: 12px/1.4 'JetBrains Mono', monospace;
-    max-height: 360px; overflow: auto;
+    background: var(--ink); color: var(--bg-alt);
+    padding: 1rem; margin-top: 0.5rem;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.78rem; line-height: 1.4;
+    max-height: 320px; overflow: auto;
     white-space: pre-wrap; word-break: break-all;
-    border-left: 3px solid var(--blood);
+    border-radius: 2px;
   }
+  p.back { font-size: 0.88rem; color: var(--ink-mute); }
+  p.back a { color: var(--accent-dark); }
 </style>
 </head>
 <body>
-
 <main>
 
-<div class="crumb">
-  <a href="{{ request.url_for('home') }}">← back to paraligilo</a>
+<p class="back"><a href="{{ request.url_for('home') }}">← back to paraligilo</a></p>
+
+<h1>Job</h1>
+<p><code style="font-family:'IBM Plex Mono',monospace; font-size:0.9em; color:var(--ink-mute)">{{ job.id }}</code></p>
+
+<hr />
+
+<p>
+  <span class="status {{ job.status }}" id="status">{{ job.status }}</span>
+  <span class="stage" id="stage">{{ progress.stage }}</span>
+</p>
+
+<div class="progress">
+  <div class="progress-bar" id="progress-bar" style="width: 0%"></div>
 </div>
 
-<h1>
-  Job
-  <span class="jobid">{{ job.id }}</span>
-</h1>
+<dl class="meta">
+  <dt>original</dt><dd>{{ job.orig_name }}</dd>
+  <dt>translation</dt><dd>{{ job.trans_name }}</dd>
+  <dt>method</dt><dd>{{ job.mode }}</dd>
+</dl>
 
-<div class="pane">
-  <div class="status-row">
-    <span class="status-pill {{ job.status }}" id="status">{{ job.status }}</span>
-    <span class="status-stage" id="stage">{{ progress.stage }}</span>
-  </div>
+<div class="detail" id="detail">{{ progress.detail }}</div>
+<div class="elapsed" id="elapsed">elapsed: —</div>
 
-  <div class="progress progress-anim">
-    <div class="progress-bar" id="progress-bar" style="width: 0%"></div>
-  </div>
-
-  <ul class="files">
-    <li class="k">original</li>      <li class="v">{{ job.orig_name }}</li>
-    <li class="k">translation</li>   <li class="v">{{ job.trans_name }}</li>
-    <li class="k">method</li>        <li class="v">{{ job.mode }}</li>
-  </ul>
-
-  <div class="detail" id="detail">{{ progress.detail }}</div>
-  <div class="elapsed" id="elapsed">elapsed: —</div>
-
-  <div id="downloads">
-    <div class="dl-grid">
-      <a class="dl-btn" href="{{ request.url_for('download', job_id=job.id, kind='alignment') }}">alignment.jsonl</a>
-      <a class="dl-btn secondary" href="{{ request.url_for('download', job_id=job.id, kind='sample') }}">sample.md</a>
-      <a class="dl-btn secondary" href="{{ request.url_for('download', job_id=job.id, kind='log') }}">run.log</a>
-    </div>
-  </div>
-
-  <details class="log-fold">
-    <summary>Live log tail</summary>
-    <pre class="tail" id="tail">{{ progress.tail or "" }}</pre>
-  </details>
+<div id="downloads">
+  <a href="{{ request.url_for('download', job_id=job.id, kind='alignment') }}">alignment.jsonl</a>
+  <a class="secondary" href="{{ request.url_for('download', job_id=job.id, kind='sample') }}">sample.md</a>
+  <a class="secondary" href="{{ request.url_for('download', job_id=job.id, kind='log') }}">run.log</a>
 </div>
+
+<details class="logfold">
+  <summary>Live log tail</summary>
+  <pre class="tail" id="tail">{{ progress.tail or "" }}</pre>
+</details>
 
 </main>
 
 <script>
 const STATUS_URL = {{ request.url_for('job_status', job_id=job.id)|string|tojson }};
 const STAGE_ORDER = ["extract", "embed", "anchors", "align_full", "anchors_det", "align_det", "rescore_concat", "refine", "rescore_llm", "verify"];
-
 function fmtTime(s) {
   const m = Math.floor(s/60), r = s%60;
   return m ? `${m}m ${r}s` : `${r}s`;
@@ -224,7 +148,7 @@ async function poll() {
     const r = await fetch(STATUS_URL);
     const d = await r.json();
     document.getElementById("status").textContent = d.status;
-    document.getElementById("status").className = "status-pill " + d.status;
+    document.getElementById("status").className = "status " + d.status;
     document.getElementById("stage").textContent = d.stage;
     document.getElementById("detail").textContent = d.detail || "";
     document.getElementById("elapsed").textContent = "elapsed: " + fmtTime(d.elapsed);
