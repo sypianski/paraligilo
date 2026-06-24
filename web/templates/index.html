@@ -4,154 +4,137 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>paraligilo — sentence-level EPUB alignment</title>
-<meta name="description" content="Align an EPUB and its translation at sentence level. Free deterministic mode, optional AI mode with OpenAI embeddings.">
-<link rel="icon" type="image/png" href="/favicon.png">
+<meta name="description" content="Align an EPUB and its translation at sentence level. Free deterministic mode, optional AI mode.">
+<link rel="icon" type="image/png" href="https://sypian.ski/favicon.png">
 <link rel="stylesheet" href="https://sypian.ski/styles.css?v=8">
 <style>
-  /* paraligilo additions, in the scriptorium register */
-  form.align-form { margin: 1rem 0 2rem; }
-  form.align-form .row { margin-bottom: 1.25rem; }
-  form.align-form label.lbl {
-    display: block;
-    font-family: var(--font-display);
-    font-size: 1rem; color: var(--ink-soft);
-    margin-bottom: 0.35rem;
-  }
-  form.align-form label.lbl .hint {
-    color: var(--ink-mute); font-style: italic; font-size: 0.9rem; margin-left: 0.5rem;
-  }
-  form.align-form input[type=password],
-  form.align-form input[type=text] {
-    width: 100%;
-    padding: 0.55rem 0.7rem;
-    background: var(--bg-alt);
-    border: 1px solid var(--rule);
-    font-family: var(--font-body);
-    font-size: 0.95rem;
-    color: var(--ink);
-    border-radius: 2px;
-  }
-  form.align-form input[type=password]:focus,
-  form.align-form input[type=text]:focus {
-    outline: none; border-color: var(--accent);
-  }
+  /* paraligilo: minimal additions on top of sypian.ski styles.css */
 
-  /* drop-zone upload */
+  /* file drop rows — same hairline frame as .project-card */
   .drop {
     position: relative;
-    background: var(--bg-alt);
-    border: 1.5px dashed var(--rule);
-    border-radius: 2px;
-    padding: 1.1rem 1rem;
-    text-align: center;
+    display: grid;
+    grid-template-columns: 2rem 1fr auto;
+    align-items: center; column-gap: 0.875rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--rule);
     cursor: pointer;
-    transition: border-color .15s, background .15s;
+    color: var(--ink);
+    transition: color .15s;
   }
-  .drop:hover { border-color: var(--ink-mute); background: var(--bg); }
-  .drop.dragging {
-    border-color: var(--accent);
-    border-style: solid;
-    background: var(--bg);
+  .drop:first-of-type { border-top: 1px solid var(--rule); }
+  .drop .drop-ico { color: var(--ink-mute); display: flex; }
+  .drop:hover { color: var(--accent-dark); }
+  .drop:hover .drop-ico, .drop.has-file .drop-ico { color: var(--accent-dark); }
+  .drop.dragging { color: var(--accent-dark); background: var(--bg-alt); }
+  .drop .drop-text {
+    font-family: var(--font-body); font-size: 1rem; line-height: 1.4;
   }
-  .drop.has-file {
-    border-style: solid; border-color: var(--accent-soft);
-    background: var(--bg);
-    text-align: left;
-  }
+  .drop .drop-text .em { color: var(--accent-dark); text-decoration: underline; text-underline-offset: 2px; }
+  .drop .drop-name { color: var(--ink); font-family: var(--font-display); }
+  .drop .drop-meta { font-size: 0.82rem; color: var(--ink-mute); font-style: italic; margin-left: 0.5rem; }
   .drop input[type=file] {
     position: absolute; inset: 0; opacity: 0; cursor: pointer;
     width: 100%; height: 100%;
   }
-  .drop .icon {
-    display: inline-block;
-    color: var(--ink-mute);
-    margin-right: 0.5rem; vertical-align: -3px;
+  .drop .drop-clear {
+    color: var(--ink-mute); font-size: 1.15rem; line-height: 1;
+    padding: 0.2rem 0.4rem; opacity: 0;
+    transition: opacity .15s, color .15s; z-index: 2;
   }
-  .drop.has-file .icon { color: var(--accent); }
-  .drop .prompt {
-    font-family: var(--font-body); color: var(--ink-soft);
-    font-size: 0.95rem;
+  .drop.has-file .drop-clear { opacity: 1; }
+  .drop .drop-clear:hover { color: var(--ink); }
+
+  /* mode picker — also .project-card visual */
+  .modes { margin: 1rem 0 1.5rem; }
+  .mode-row {
+    display: grid;
+    grid-template-columns: 1.5rem 1fr auto;
+    align-items: baseline; column-gap: 0.875rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--rule);
+    cursor: pointer; color: var(--ink);
   }
-  .drop .prompt em { color: var(--accent-dark); font-style: normal; text-decoration: underline; text-underline-offset: 2px; }
-  .drop .filename {
-    font-family: var(--font-display); color: var(--ink);
-    font-size: 1rem; word-break: break-all;
+  .mode-row:first-of-type { border-top: 1px solid var(--rule); }
+  .mode-row:hover .mode-name { color: var(--accent-dark); }
+  .mode-row input[type=radio] { margin: 0; cursor: pointer; }
+  .mode-row .mode-name { font-family: var(--font-display); font-size: 1.05rem; }
+  .mode-row .mode-desc {
+    color: var(--ink-soft); font-size: 0.92rem; margin-top: 0.15rem;
+    line-height: 1.4;
   }
-  .drop .filesize {
-    color: var(--ink-mute); font-size: 0.82rem;
-    font-style: italic; margin-left: 0.5rem;
+  .mode-row .mode-meta { color: var(--ink-mute); font-style: italic; font-size: 0.88rem; }
+  .mode-row:has(input:checked) .mode-name { color: var(--accent-dark); }
+
+  /* form fields, restrained */
+  .field { margin: 1rem 0; }
+  .field .lbl {
+    display: block; font-family: var(--font-display);
+    font-size: 0.95rem; color: var(--ink-soft);
+    margin-bottom: 0.3rem;
   }
-  .drop .clear {
-    position: absolute; top: 0.4rem; right: 0.4rem;
-    width: 22px; height: 22px; line-height: 18px; text-align: center;
-    background: var(--bg-alt); border: 1px solid var(--rule); border-radius: 50%;
-    cursor: pointer; color: var(--ink-mute); font-size: 14px;
-    display: none; z-index: 2;
+  .field .lbl .hint {
+    color: var(--ink-mute); font-style: italic; font-weight: normal; margin-left: 0.4rem; font-size: 0.85rem;
   }
-  .drop.has-file .clear { display: block; }
-  .drop .clear:hover { color: var(--ink); border-color: var(--ink-mute); }
-  .modes { display: flex; gap: 1rem; flex-wrap: wrap; }
-  .mode { flex: 1 1 16rem; }
-  .mode label {
-    display: block; cursor: pointer;
-    background: var(--bg-alt); border: 1px solid var(--rule);
-    padding: 0.8rem 1rem; border-radius: 2px;
+  .field input[type=password], .field input[type=text] {
+    width: 100%;
+    padding: 0.45rem 0;
+    background: transparent;
+    border: none; border-bottom: 1px solid var(--rule);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.92rem; color: var(--ink);
+    outline: none;
     transition: border-color .15s;
   }
-  .mode label:hover { border-color: var(--ink-mute); }
-  .mode input[type=radio] { display: none; }
-  .mode input[type=radio]:checked + .mode-body {
-    color: var(--ink);
+  .field input[type=password]:focus, .field input[type=text]:focus {
+    border-bottom-color: var(--accent);
   }
-  .mode label:has(input:checked) {
-    border-color: var(--accent);
-    background: var(--bg);
-  }
-  .mode-name { font-family: var(--font-display); font-size: 1.05rem; display: block; margin-bottom: 0.2rem; }
-  .mode-meta { font-size: 0.85rem; color: var(--ink-mute); font-style: italic; }
-  .mode-blurb { font-size: 0.92rem; color: var(--ink-soft); margin-top: 0.4rem; line-height: 1.45; }
-  #ai-only { display: none; margin-top: 1rem; padding: 1rem; background: var(--bg-alt); border-left: 2px solid var(--accent); }
+  #ai-only { display: none; margin-top: 0.5rem; padding-left: 1rem; border-left: 2px solid var(--rule); }
   body:has(#mode-ai:checked) #ai-only { display: block; }
-  .check { display: flex; align-items: flex-start; gap: 0.6rem; margin-top: 0.6rem; }
-  .check input[type=checkbox] { margin-top: 0.3rem; }
-  .check label { font-size: 0.92rem; color: var(--ink-soft); cursor: pointer; }
-  button.go {
-    background: var(--ink); color: var(--bg);
-    border: none; padding: 0.7rem 1.6rem;
-    font-family: var(--font-display); font-size: 1rem;
-    cursor: pointer; border-radius: 2px;
-    transition: background .15s;
-  }
-  button.go:hover { background: var(--accent-dark); color: var(--bg); }
-  p.fine { color: var(--ink-mute); font-size: 0.85rem; font-style: italic; }
-  p.warn {
-    border-left: 2px solid var(--accent);
-    padding: 0.6rem 0.9rem; background: var(--bg-alt);
-    font-size: 0.95rem;
+
+  .check { display: flex; align-items: flex-start; gap: 0.5rem; margin-top: 0.6rem; }
+  .check input[type=checkbox] { margin-top: 0.25rem; cursor: pointer; }
+  .check label {
+    font-family: var(--font-body); font-size: 0.92rem;
+    color: var(--ink-soft); cursor: pointer; line-height: 1.45;
   }
 
-  /* live stats strip */
-  .live-stats {
-    display: flex; flex-wrap: wrap; gap: 1.5rem;
-    padding: 0.65rem 0.9rem;
-    background: var(--bg-alt);
-    border: 1px solid var(--rule);
-    border-radius: 2px;
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.82rem;
-    color: var(--ink-mute);
-    margin: 1rem 0 1.5rem;
+  /* submit — looks like a link with arrow, fits sypian aesthetic */
+  .go-row { margin: 1.5rem 0 0.5rem; display: flex; align-items: baseline; gap: 1rem; }
+  button.go {
+    background: none; border: none;
+    font-family: var(--font-display);
+    font-size: 1.1rem; color: var(--accent-dark);
+    cursor: pointer; padding: 0;
   }
-  .live-stats .ls-cell { display: flex; align-items: baseline; gap: 0.4rem; }
-  .live-stats .ls-cell strong { color: var(--ink); font-weight: 600; }
-  .live-stats .ls-cell.warn strong { color: var(--accent-dark); }
-  .live-stats .ls-dot {
-    width: 8px; height: 8px; border-radius: 50%;
-    background: var(--ink-faint); display: inline-block;
+  button.go:hover { color: var(--ink); }
+  button.go::after {
+    content: ' \2192';
+    transition: margin-left .15s;
+    display: inline-block; margin-left: 0.25rem;
   }
-  .live-stats .ls-dot.active { background: var(--accent); animation: pulse 1.4s ease-in-out infinite; }
+  button.go:hover::after { margin-left: 0.45rem; }
+  .go-row .fine { font-size: 0.82rem; color: var(--ink-mute); font-style: italic; }
+
+  /* live stats — a single italic line, no box */
+  .live {
+    font-size: 0.85rem; color: var(--ink-mute);
+    font-style: italic;
+    margin: 0.5rem 0 1rem;
+  }
+  .live strong { font-weight: 600; font-style: normal; color: var(--ink-soft); }
+  .live .warn-num { color: var(--accent-dark); }
+  .live .dot {
+    display: inline-block; width: 6px; height: 6px;
+    border-radius: 50%; background: var(--ink-faint);
+    vertical-align: 0.05em; margin-right: 0.3rem;
+  }
+  .live .dot.active {
+    background: var(--accent);
+    animation: pulse 1.4s ease-in-out infinite;
+  }
   @keyframes pulse {
-    0%,100% { opacity: 1; } 50% { opacity: 0.35; }
+    0%,100% { opacity: 1; } 50% { opacity: 0.3; }
   }
 </style>
 </head>
@@ -167,114 +150,99 @@
 
 <p>Upload the original and its translation. You get back a JSONL mapping each source sentence to its counterpart(s), with confidence scores and m:n move types (1:1, 1:2, 2:1, …) reflecting where the translator split or merged sentences. Output expires after 24 hours.</p>
 
-<div class="live-stats" id="liveStats" title="Server activity, updates every 5 s">
-  <span class="ls-cell"><span class="ls-dot" id="lsDot"></span><strong id="lsRunning">—</strong> running</span>
-  <span class="ls-cell"><strong id="lsQueued">—</strong> queued</span>
-  <span class="ls-cell" id="lsAiCell">AI <strong><span id="lsAiUsed">—</span>/<span id="lsAiQuota">—</span></strong> today</span>
-  <span class="ls-cell" id="lsDetCell">det. <strong><span id="lsDetUsed">—</span>/<span id="lsDetQuota">—</span></strong> today</span>
-</div>
+<p class="live">
+  <span class="dot" id="lsDot"></span>
+  <strong id="lsRunning">—</strong> running, <strong id="lsQueued">—</strong> queued ·
+  AI <strong id="lsAi">—</strong>, deterministic <strong id="lsDet">—</strong> today
+  <span style="margin-left:.5em">— small private server; if a quota is hit, <a href="https://github.com/sypianski/paraligilo">run the CLI yourself</a>.</span>
+</p>
 
-<p class="fine">Small private server, small daily caps. If the quota is hit, wait a few hours or <a href="https://github.com/sypianski/paraligilo">run the CLI yourself</a> — same code, no limits.</p>
+<form action="{{ request.url_for('start_align') }}" method="post" enctype="multipart/form-data">
 
-<form class="align-form" action="{{ request.url_for('start_align') }}" method="post" enctype="multipart/form-data">
+  <label class="drop" data-drop>
+    <span class="drop-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
+    <span class="drop-text">
+      <span class="drop-prompt">Original — drop EPUB here, or <span class="em">browse</span>.</span>
+    </span>
+    <span class="drop-clear" title="Remove">×</span>
+    <input type="file" name="orig" accept=".epub" required>
+  </label>
 
-  <div class="row">
-    <label class="lbl">Original EPUB <span class="hint">the book in its source language</span></label>
-    <div class="drop" data-drop>
-      <span class="clear" title="Remove">×</span>
-      <input type="file" name="orig" accept=".epub" required>
-      <div class="prompt">
-        <svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        Drop EPUB here, or <em>browse</em>
-      </div>
-    </div>
-  </div>
+  <label class="drop" data-drop>
+    <span class="drop-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
+    <span class="drop-text">
+      <span class="drop-prompt">Translation — drop the same book in another language, or <span class="em">browse</span>.</span>
+    </span>
+    <span class="drop-clear" title="Remove">×</span>
+    <input type="file" name="trans" accept=".epub" required>
+  </label>
 
-  <div class="row">
-    <label class="lbl">Translation EPUB <span class="hint">the same book in another language</span></label>
-    <div class="drop" data-drop>
-      <span class="clear" title="Remove">×</span>
-      <input type="file" name="trans" accept=".epub" required>
-      <div class="prompt">
-        <svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        Drop EPUB here, or <em>browse</em>
-      </div>
-    </div>
-  </div>
-
-  <div class="row">
-    <label class="lbl">Method</label>
-    <div class="modes">
-      <div class="mode">
-        <label>
-          <input type="radio" name="mode" value="deterministic" checked id="mode-det">
-          <div class="mode-body">
-            <span class="mode-name">Free · deterministic</span>
-            <span class="mode-meta">no key, offline, ≈ 2 s</span>
-            <div class="mode-blurb">Surface-token anchors plus classic Gale-Church length DP. 80–90% precision on faithful translations.</div>
-          </div>
-        </label>
-      </div>
-      <div class="mode">
-        <label>
-          <input type="radio" name="mode" value="ai" id="mode-ai">
-          <div class="mode-body">
-            <span class="mode-name">AI · embeddings</span>
-            <span class="mode-meta">API key required, ≈ 30 s, ≈ $0.10</span>
-            <div class="mode-blurb">Multilingual embeddings plus optional <code>gpt-4o-mini</code> sanity-check. Higher precision on paraphrases and restructured prose.</div>
-          </div>
-        </label>
-      </div>
-    </div>
+  <div class="modes">
+    <label class="mode-row">
+      <input type="radio" name="mode" value="deterministic" checked id="mode-det">
+      <span>
+        <span class="mode-name">Free, deterministic</span>
+        <div class="mode-desc">Surface-token anchors plus classic Gale-Church length DP. 80–90 % precision on faithful translations.</div>
+      </span>
+      <span class="mode-meta">no key · ≈ 2 s</span>
+    </label>
+    <label class="mode-row">
+      <input type="radio" name="mode" value="ai" id="mode-ai">
+      <span>
+        <span class="mode-name">AI, embeddings</span>
+        <div class="mode-desc">Multilingual embeddings plus optional <em>gpt-4o-mini</em> sanity-check. Higher precision on paraphrases and restructured prose.</div>
+      </span>
+      <span class="mode-meta">API key · ≈ 30 s</span>
+    </label>
   </div>
 
   <div id="ai-only">
-    <div class="row">
+    <div class="field">
       <label class="lbl">API key <span class="hint">used only to embed; never stored or logged</span></label>
-      <input type="password" name="api_key" placeholder="sk-..." autocomplete="off">
-      <p class="fine" style="margin-top: 0.4rem;">Any OpenAI-compatible endpoint works — OpenAI itself, OpenRouter, Together, Groq, Mistral, a self-hosted vLLM/Ollama, &c. If using a non-OpenAI endpoint, set its base URL below; otherwise leave it blank.</p>
+      <input type="password" name="api_key" placeholder="sk-…" autocomplete="off">
+      <p class="check" style="display:block; margin-top:0.4rem; font-size:0.85rem; color:var(--ink-mute); font-style:italic;">Any OpenAI-compatible endpoint works — OpenAI, OpenRouter, Together, Groq, Mistral, vLLM, Ollama. Set a base URL below if not OpenAI.</p>
     </div>
-    <div class="row">
+    <div class="field">
       <label class="lbl">Base URL <span class="hint">optional; defaults to <code>https://api.openai.com/v1</code></span></label>
       <input type="text" name="base_url" placeholder="https://openrouter.ai/api/v1" autocomplete="off">
     </div>
     {% if has_server_key %}
     <div class="check">
       <input type="checkbox" name="use_server_key" id="srvkey">
-      <label for="srvkey">Use this site's key instead (rate-limited trial).</label>
+      <label for="srvkey">Use this site's key instead — rate-limited trial.</label>
     </div>
     {% endif %}
     <div class="check">
       <input type="checkbox" name="llm" id="llm" checked>
-      <label for="llm">Run honest LLM rescore (+ ≈ $0.005, + ≈ 3 min) — labels false alignments truthfully rather than pretending. Requires a chat-completion model named <code>gpt-4o-mini</code> at the endpoint.</label>
+      <label for="llm">Run honest LLM rescore (+ ≈ $0.005, + ≈ 3 min) — labels false alignments truthfully rather than pretending.</label>
     </div>
   </div>
 
-  <div class="row" style="margin-top: 1.5rem;">
-    <button class="go" type="submit">Align</button>
-    <p class="fine" style="display:inline-block; margin-left:1rem;">Max {{ max_mb }} MB per file.</p>
+  <div class="go-row">
+    <button type="submit" class="go">Align</button>
+    <span class="fine">Max {{ max_mb }} MB per file.</span>
   </div>
 </form>
 
-<p class="warn"><strong>Verify your input pair.</strong> Two different books by the same author produce confident-looking nonsense. Skim the produced sample.md before trusting the alignment.</p>
+<p><em>Verify your input pair</em> before trusting the alignment. Two different books by the same author produce confident-looking nonsense — skim the produced sample.md first.</p>
 
 <h2>Method</h2>
 
 <p>The free mode uses surface anchors — years, numbers, rare proper-noun co-occurrences chained monotonically — then a Gale-Church length-only dynamic-programming alignment with m:n moves between anchors. Classical 1993 technique, no model, no network.</p>
 
-<p>The AI mode adds multilingual sentence embeddings (default <em>text-embedding-3-large</em>) so semantic similarity informs the cost function, then optionally asks <em>gpt-4o-mini</em> to plainly label residual low-confidence pairs as <em>yes</em>, <em>partial</em>, or <em>no</em>. About $0.10 per book paid directly to your chosen API provider — OpenAI, OpenRouter, Together, Groq, Mistral, or a self-hosted OpenAI-compatible endpoint such as vLLM or Ollama.</p>
+<p>The AI mode adds multilingual sentence embeddings (default <em>text-embedding-3-large</em>) so semantic similarity informs the cost function, then optionally asks <em>gpt-4o-mini</em> to plainly label residual low-confidence pairs as <em>yes</em>, <em>partial</em>, or <em>no</em>. About $0.10 per book paid directly to your chosen API provider.</p>
 
-<p>Measured on real pairs: 94% high+medium confidence on Sienkiewicz <em>Quo Vadis</em> (PL↔EN, deterministic), 86% on Tom Segev <em>Seventh Million</em> (EN↔IT, AI mode). Translator faithfulness matters more than language pair.</p>
+<p>Measured on real pairs: 94 % high+medium confidence on Sienkiewicz <em>Quo Vadis</em> (PL↔EN, deterministic), 86 % on Tom Segev <em>Seventh Million</em> (EN↔IT, AI mode). Translator faithfulness matters more than language pair.</p>
 
 <h2>Source</h2>
 
 <p><a href="https://github.com/sypianski/paraligilo">github.com/sypianski/paraligilo</a> — AGPL-3.0. Built for the <a href="https://github.com/sypianski/koreader-konfig">Rosetta KOReader plugin</a> but useful for parallel reading apps, bilingual EPUB construction, language-learning decks, translation studies.</p>
 
-<hr />
-
-<footer style="margin-top: 1rem; font-size: 0.88rem; color: var(--ink-mute); font-style: italic;">
-  by <a href="https://sypian.ski/" style="color: var(--accent-dark); font-style: normal;">Jakub Sypiański</a>
-</footer>
+<p style="text-align:center; font-size:0.88rem; color:var(--ink-mute); font-style:italic; margin-top:2rem;">
+  by <a href="https://sypian.ski/" style="font-style:normal;">Jakub Sypiański</a>
+  &nbsp;·&nbsp;
+  <a href="https://ko-fi.com/sypianski" style="font-style:normal;">buy me a coffee ☕</a>
+</p>
 
 </main>
 
@@ -286,32 +254,31 @@ function fmtBytes(n) {
 }
 function showFile(drop, file) {
   drop.classList.add('has-file');
-  const prompt = drop.querySelector('.prompt');
-  prompt.innerHTML =
-    '<svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>' +
-    '<span class="filename">' + file.name.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span>' +
-    '<span class="filesize">' + fmtBytes(file.size) + '</span>';
+  drop.querySelector('.drop-prompt').innerHTML =
+    '<span class="drop-name"></span><span class="drop-meta"></span>';
+  drop.querySelector('.drop-name').textContent = file.name;
+  drop.querySelector('.drop-meta').textContent = fmtBytes(file.size);
 }
-function resetDrop(drop) {
+function resetDrop(drop, label) {
   drop.classList.remove('has-file');
   const input = drop.querySelector('input[type=file]');
   input.value = '';
-  drop.querySelector('.prompt').innerHTML =
-    '<svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Drop EPUB here, or <em>browse</em>';
+  drop.querySelector('.drop-prompt').innerHTML =
+    label + ' — drop EPUB here, or <span class="em">browse</span>.';
 }
 
 document.querySelectorAll('[data-drop]').forEach(drop => {
   const input = drop.querySelector('input[type=file]');
-  const clearBtn = drop.querySelector('.clear');
+  const clearBtn = drop.querySelector('.drop-clear');
+  const initialLabel = drop.querySelector('.drop-prompt').textContent.split(' — ')[0];
 
   input.addEventListener('change', () => {
     if (input.files && input.files[0]) showFile(drop, input.files[0]);
-    else resetDrop(drop);
+    else resetDrop(drop, initialLabel);
   });
-
   clearBtn.addEventListener('click', (e) => {
     e.preventDefault(); e.stopPropagation();
-    resetDrop(drop);
+    resetDrop(drop, initialLabel);
   });
 
   ['dragenter','dragover'].forEach(evt => {
@@ -334,7 +301,6 @@ document.querySelectorAll('[data-drop]').forEach(drop => {
       alert('Please drop an .epub file.');
       return;
     }
-    // assign dropped file to the input via DataTransfer
     const dt = new DataTransfer();
     dt.items.add(file);
     input.files = dt.files;
@@ -342,30 +308,29 @@ document.querySelectorAll('[data-drop]').forEach(drop => {
   });
 });
 
-// Prevent the whole window from navigating away when a file is dropped outside a drop zone
 ['dragover','drop'].forEach(evt => {
   window.addEventListener(evt, e => {
     if (!e.target.closest('[data-drop]')) {
       e.preventDefault();
-      if (evt === 'drop') e.dataTransfer.dropEffect = 'none';
+      if (evt === 'drop' && e.dataTransfer) e.dataTransfer.dropEffect = 'none';
     }
   });
 });
 
-// Live server stats
+// live stats
 async function tickStats() {
   try {
     const r = await fetch({{ request.url_for('stats')|string|tojson }}, {cache: 'no-store'});
     const s = await r.json();
     document.getElementById('lsRunning').textContent = s.running + '/' + s.concurrent_cap;
     document.getElementById('lsQueued').textContent  = s.queued;
-    document.getElementById('lsAiUsed').textContent  = s.ai_used;
-    document.getElementById('lsAiQuota').textContent = s.ai_quota;
-    document.getElementById('lsDetUsed').textContent = s.det_used;
-    document.getElementById('lsDetQuota').textContent= s.det_quota;
+    const aiSpan = document.getElementById('lsAi');
+    aiSpan.innerHTML = s.ai_used + '/' + s.ai_quota;
+    aiSpan.classList.toggle('warn-num', s.ai_used >= s.ai_quota);
+    const detSpan = document.getElementById('lsDet');
+    detSpan.innerHTML = s.det_used + '/' + s.det_quota;
+    detSpan.classList.toggle('warn-num', s.det_used >= s.det_quota);
     document.getElementById('lsDot').classList.toggle('active', s.running > 0);
-    document.getElementById('lsAiCell' ).classList.toggle('warn', s.ai_used  >= s.ai_quota);
-    document.getElementById('lsDetCell').classList.toggle('warn', s.det_used >= s.det_quota);
   } catch (e) { /* silent */ }
 }
 tickStats();
