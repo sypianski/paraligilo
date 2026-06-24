@@ -24,9 +24,14 @@ MOVE_PRIOR = {
     (1,2): 0.3, (2,1): 0.3,
     (1,3): 1.0, (3,1): 1.0,
     (2,2): 0.6,
-    (1,0): 1.8, (0,1): 1.8,
+    # Gap moves cheap on purpose: translators routinely drop paragraphs
+    # (Zamenhof's Marta opens 16 lines later than the PL original, etc.).
+    # Forcing 1:1 across a gap creates a cascading offset that wrecks the
+    # rest of the chapter. Better to admit a 1:0 and keep going.
+    (1,0): 0.45, (0,1): 0.45,
 }
 VAR_FACTOR = 6.8   # Gale-Church empirical variance per char of orig length
+GAP_LEN_PENALTY = 0.003  # per-char cost added to gap moves (keeps short gaps cheap)
 
 def length(text):
     return max(1, len(text))
@@ -56,7 +61,7 @@ def align_segment(rows_o, rows_t, ratio):
                 if dm == 0 and dn == 0: continue
                 # cost
                 if dm == 0 or dn == 0:
-                    c = prior + (lt_sum if dn else lo_sum) * 0.01
+                    c = prior + (lt_sum if dn else lo_sum) * GAP_LEN_PENALTY
                 else:
                     expected = lo_sum * ratio
                     var = max(1.0, lo_sum * VAR_FACTOR)
@@ -96,7 +101,12 @@ def main():
     ap.add_argument("--orig-jsonl", required=True)
     ap.add_argument("--trans-jsonl", required=True)
     ap.add_argument("--anchors", required=True)
-    ap.add_argument("--max-segment", type=int, default=400)
+    ap.add_argument("--max-segment", type=int, default=1200,
+                    help="DP runs on segments up to this many rows; "
+                         "larger ones get slack-filled (and become misses).")
+    ap.add_argument("--min-pair-confidence", type=float, default=0.30,
+                    help="After DP, drop matched pairs with length-fit "
+                         "confidence below this and re-emit them as gaps.")
     ap.add_argument("-o","--out", required=True)
     args = ap.parse_args()
     rows_o = [json.loads(l) for l in Path(args.orig_jsonl).read_text().splitlines() if l.strip()]
@@ -153,11 +163,31 @@ def main():
             full.append(p)
         if k % 50 == 0:
             print(f"  segment {k}/{len(boundary)-1}", file=sys.stderr)
-    Path(args.out).write_text("\n".join(json.dumps(p, ensure_ascii=False) for p in full))
-    moves = {}
+    # Post-pass: any matched row whose length-fit confidence is below the
+    # threshold is likely a forced 1:1 over a translator-skipped paragraph.
+    # Re-emit as separate one-sided gaps so the rosetta JSON drops it
+    # rather than serving a wrong translation.
+    cleaned = []
+    n_demoted = 0
     for p in full:
+        if (p.get("method") == "length"
+                and p["orig"] and p["trans"]
+                and p.get("confidence", 0.0) < args.min_pair_confidence):
+            for i in p["orig"]:
+                cleaned.append({"orig":[i],"trans":[],"move":"1:0",
+                                "confidence":0.0,"method":"gap_orig"})
+            for j in p["trans"]:
+                cleaned.append({"orig":[],"trans":[j],"move":"0:1",
+                                "confidence":0.0,"method":"gap_trans"})
+            n_demoted += 1
+        else:
+            cleaned.append(p)
+
+    Path(args.out).write_text("\n".join(json.dumps(p, ensure_ascii=False) for p in cleaned))
+    moves = {}
+    for p in cleaned:
         moves[p["move"]] = moves.get(p["move"], 0) + 1
-    print(f"path len={len(full)} skipped_large={n_skip}", file=sys.stderr)
+    print(f"path len={len(cleaned)} skipped_large={n_skip} demoted_low_conf={n_demoted}", file=sys.stderr)
     print(f"top moves: {sorted(moves.items(), key=lambda x:-x[1])[:8]}", file=sys.stderr)
 
 if __name__ == "__main__":
