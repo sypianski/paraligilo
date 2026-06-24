@@ -129,6 +129,30 @@
     padding: 0.6rem 0.9rem; background: var(--bg-alt);
     font-size: 0.95rem;
   }
+
+  /* live stats strip */
+  .live-stats {
+    display: flex; flex-wrap: wrap; gap: 1.5rem;
+    padding: 0.65rem 0.9rem;
+    background: var(--bg-alt);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.82rem;
+    color: var(--ink-mute);
+    margin: 1rem 0 1.5rem;
+  }
+  .live-stats .ls-cell { display: flex; align-items: baseline; gap: 0.4rem; }
+  .live-stats .ls-cell strong { color: var(--ink); font-weight: 600; }
+  .live-stats .ls-cell.warn strong { color: var(--accent-dark); }
+  .live-stats .ls-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--ink-faint); display: inline-block;
+  }
+  .live-stats .ls-dot.active { background: var(--accent); animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse {
+    0%,100% { opacity: 1; } 50% { opacity: 0.35; }
+  }
 </style>
 </head>
 <body>
@@ -142,6 +166,13 @@
 <h2>Align two EPUBs</h2>
 
 <p>Upload the original and its translation. You get back a JSONL mapping each source sentence to its counterpart(s), with confidence scores and m:n move types (1:1, 1:2, 2:1, …) reflecting where the translator split or merged sentences. Output expires after 24 hours.</p>
+
+<div class="live-stats" id="liveStats" title="Server activity, updates every 5 s">
+  <span class="ls-cell"><span class="ls-dot" id="lsDot"></span><strong id="lsRunning">—</strong> running</span>
+  <span class="ls-cell"><strong id="lsQueued">—</strong> queued</span>
+  <span class="ls-cell" id="lsAiCell">AI <strong><span id="lsAiUsed">—</span>/<span id="lsAiQuota">—</span></strong> today</span>
+  <span class="ls-cell" id="lsDetCell">det. <strong><span id="lsDetUsed">—</span>/<span id="lsDetQuota">—</span></strong> today</span>
+</div>
 
 <form class="align-form" action="{{ request.url_for('start_align') }}" method="post" enctype="multipart/form-data">
 
@@ -318,6 +349,25 @@ document.querySelectorAll('[data-drop]').forEach(drop => {
     }
   });
 });
+
+// Live server stats
+async function tickStats() {
+  try {
+    const r = await fetch({{ request.url_for('stats')|string|tojson }}, {cache: 'no-store'});
+    const s = await r.json();
+    document.getElementById('lsRunning').textContent = s.running + '/' + s.concurrent_cap;
+    document.getElementById('lsQueued').textContent  = s.queued;
+    document.getElementById('lsAiUsed').textContent  = s.ai_used;
+    document.getElementById('lsAiQuota').textContent = s.ai_quota;
+    document.getElementById('lsDetUsed').textContent = s.det_used;
+    document.getElementById('lsDetQuota').textContent= s.det_quota;
+    document.getElementById('lsDot').classList.toggle('active', s.running > 0);
+    document.getElementById('lsAiCell' ).classList.toggle('warn', s.ai_used  >= s.ai_quota);
+    document.getElementById('lsDetCell').classList.toggle('warn', s.det_used >= s.det_quota);
+  } catch (e) { /* silent */ }
+}
+tickStats();
+setInterval(tickStats, 5000);
 </script>
 
 </body>

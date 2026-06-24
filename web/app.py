@@ -40,6 +40,12 @@ JOB_TTL_HOURS = int(os.environ.get("PARALIGILO_TTL_HOURS", "24"))
 MAX_UPLOAD_MB = int(os.environ.get("PARALIGILO_MAX_MB", "30"))
 SERVER_FALLBACK_KEY = os.environ.get("OPENAI_API_KEY")  # used for "free quota" if set
 
+# Daily quotas (rolling 24h window).
+DAILY_QUOTA_AI  = int(os.environ.get("PARALIGILO_DAILY_AI",  "5"))
+DAILY_QUOTA_DET = int(os.environ.get("PARALIGILO_DAILY_DET", "50"))
+# Refuse new jobs when free disk below this many MB.
+DISK_FLOOR_MB   = int(os.environ.get("PARALIGILO_DISK_FLOOR_MB", "5000"))
+
 # Rate limits — override via env to tighten/loosen.
 RL_ALIGN     = os.environ.get("PARALIGILO_RL_ALIGN",     "10/hour")
 RL_ALIGN_AI  = os.environ.get("PARALIGILO_RL_ALIGN_AI",  "3/hour")   # when server-key used
@@ -54,6 +60,48 @@ def _client_ip(request: Request) -> str:
     return get_remote_address(request)
 
 limiter = Limiter(key_func=_client_ip, default_limits=["200/hour"])
+
+def _disk_free_mb() -> int:
+    try:
+        stat = os.statvfs(JOBS_DIR)
+        return int(stat.f_bavail * stat.f_frsize / (1024 * 1024))
+    except Exception:
+        return 0
+
+def _count_recent(mode: str | None = None, hours: int = 24) -> int:
+    cutoff = time.time() - hours * 3600
+    n = 0
+    for j in JOBS.values():
+        if j["created_at"] < cutoff: continue
+        if mode and j.get("mode") != mode: continue
+        n += 1
+    return n
+
+def _job_position(job_id: str) -> int:
+    """Position in queue (1 = next to run). Returns 0 if already running/done."""
+    j = JOBS.get(job_id)
+    if not j or j["status"] != "queued": return 0
+    me = j["created_at"]
+    pos = 1
+    for other in JOBS.values():
+        if other["id"] == job_id: continue
+        if other["status"] in ("queued", "running") and other["created_at"] < me:
+            pos += 1
+    return pos
+
+def _stats_snapshot() -> dict:
+    running = sum(1 for j in JOBS.values() if j["status"] == "running")
+    queued  = sum(1 for j in JOBS.values() if j["status"] == "queued")
+    ai_24h  = _count_recent("ai", 24)
+    det_24h = _count_recent("deterministic", 24)
+    return {
+        "running": running, "queued": queued,
+        "concurrent_cap": MAX_CONCURRENT,
+        "ai_used": ai_24h, "ai_quota": DAILY_QUOTA_AI,
+        "det_used": det_24h, "det_quota": DAILY_QUOTA_DET,
+        "disk_free_mb": _disk_free_mb(),
+        "disk_floor_mb": DISK_FLOOR_MB,
+    }
 
 # In-memory job registry. Persists across requests within one uvicorn process.
 JOBS: dict[str, dict] = {}
@@ -211,6 +259,20 @@ async def start_align(
             else:
                 raise HTTPException(400, "AI mode requires an API key (or check the server-key box if available)")
 
+    # Disk floor
+    if _disk_free_mb() < DISK_FLOOR_MB:
+        raise HTTPException(503, "Server is low on disk space. Please retry later — old jobs are pruned every hour.")
+
+    # Daily quota
+    if mode == "ai":
+        used = _count_recent("ai", 24)
+        if used >= DAILY_QUOTA_AI:
+            raise HTTPException(429, f"Daily AI quota reached ({used}/{DAILY_QUOTA_AI} in the last 24h). The deterministic mode is unlimited.")
+    else:
+        used = _count_recent("deterministic", 24)
+        if used >= DAILY_QUOTA_DET:
+            raise HTTPException(429, f"Daily quota reached ({used}/{DAILY_QUOTA_DET} in the last 24h). Try again in a few hours.")
+
     job_id, jdir = _new_job_dir()
     orig_path = jdir / "orig.epub"
     trans_path = jdir / "trans.epub"
@@ -256,7 +318,14 @@ async def job_status(request: Request, job_id: str):
         "detail": p["detail"],
         "tail": p["tail"],
         "elapsed": int(time.time() - j["created_at"]),
+        "queue_position": _job_position(job_id),
+        "stats": _stats_snapshot(),
     })
+
+
+@app.get("/stats", name="stats")
+async def stats(request: Request):
+    return JSONResponse(_stats_snapshot())
 
 
 def _final_jsonl(j: dict) -> Optional[Path]:

@@ -111,6 +111,8 @@
   <dt>original</dt><dd>{{ job.orig_name }}</dd>
   <dt>translation</dt><dd>{{ job.trans_name }}</dd>
   <dt>method</dt><dd>{{ job.mode }}</dd>
+  <dt id="qpos-dt" style="display:none">queue position</dt>
+  <dd id="qpos-dd" style="display:none"><span id="qpos">—</span> · <span id="qpos-running">—</span> running</dd>
 </dl>
 
 <div class="detail" id="detail">{{ progress.detail }}</div>
@@ -143,6 +145,19 @@ function progressPercent(stage, status) {
   if (idx < 0) return 10;
   return Math.max(10, Math.round(((idx + 1) / STAGE_ORDER.length) * 90));
 }
+function updateQueuePos(d) {
+  const dt = document.getElementById("qpos-dt");
+  const dd = document.getElementById("qpos-dd");
+  if (d.status === "queued" && d.queue_position > 0) {
+    dt.style.display = "inline-block";
+    dd.style.display = "inline";
+    document.getElementById("qpos").textContent = "#" + d.queue_position + " of " + d.stats.queued;
+    document.getElementById("qpos-running").textContent = d.stats.running + "/" + d.stats.concurrent_cap;
+  } else {
+    dt.style.display = "none";
+    dd.style.display = "none";
+  }
+}
 async function poll() {
   try {
     const r = await fetch(STATUS_URL);
@@ -154,6 +169,7 @@ async function poll() {
     document.getElementById("elapsed").textContent = "elapsed: " + fmtTime(d.elapsed);
     document.getElementById("progress-bar").style.width = progressPercent(d.stage, d.status) + "%";
     if (d.tail) document.getElementById("tail").textContent = d.tail;
+    updateQueuePos(d);
     if (d.status === "done" || d.status === "failed") {
       document.getElementById("downloads").style.display = "block";
       return;
