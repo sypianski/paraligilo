@@ -107,12 +107,37 @@ def main() -> None:
     # Build orig sent index -> list of trans sent indices, with confidence per row.
     # Same trans sent may appear under multiple orig sents (m:1 mapping); we keep
     # all and dedup later when concatenating.
+    #
+    # SKIP unreliable rows:
+    #   - slack_large: DP couldn't align a giant segment — propagating its
+    #     hundreds of trans sentences to every orig in the block bloats the
+    #     output by 10x+ and creates meaningless multi-paragraph tgt strings.
+    #   - gap_orig/gap_trans: one-sided, no useful pairing.
+    #   - llm_no: explicitly judged a non-alignment.
+    SKIP_METHODS = {"slack_large", "gap_orig", "gap_trans", "noop", "llm_no", "llm_fail"}
+    # Also defensively cap absurd m:n blocks even when method label is missing.
+    MAX_BLOCK_TRANS = 8
+
+    n_dropped_slack = 0
+    n_dropped_huge = 0
     orig_to_trans: dict[int, list[tuple[list[int], float]]] = {}
     for row in align:
-        confidence = float(row.get("confidence", 0.0))
+        method = row.get("method", "")
+        if method in SKIP_METHODS:
+            if method == "slack_large":
+                n_dropped_slack += 1
+            continue
         trans_idxs = list(row.get("trans", []))
+        if len(trans_idxs) > MAX_BLOCK_TRANS or len(row.get("orig", [])) > MAX_BLOCK_TRANS:
+            n_dropped_huge += 1
+            continue
+        confidence = float(row.get("confidence", 0.0))
         for o in row.get("orig", []):
             orig_to_trans.setdefault(int(o), []).append((trans_idxs, confidence))
+
+    if n_dropped_slack or n_dropped_huge:
+        print(f"  filtered: {n_dropped_slack} slack_large + {n_dropped_huge} oversize rows",
+              file=sys.stderr)
 
     # Group source sentences into paragraphs.
     para_to_sents = group_paragraphs(orig)
