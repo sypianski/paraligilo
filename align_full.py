@@ -21,7 +21,7 @@ def main():
     ap.add_argument("--orig-npy", required=True)
     ap.add_argument("--trans-npy", required=True)
     ap.add_argument("--anchors", required=True)
-    ap.add_argument("--max-segment", type=int, default=200,
+    ap.add_argument("--max-segment", type=int, default=1200,
                     help="If anchor gap > this many orig sents, slack-fill (no DP)")
     ap.add_argument("-o","--out", required=True)
     args = ap.parse_args()
