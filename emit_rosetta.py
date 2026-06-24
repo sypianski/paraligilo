@@ -4,7 +4,7 @@
 # ///
 """Emit parallel-aligned.json from paraligilo final alignment + sentence files.
 
-Consumed by the rosetta KOReader plugin (https://github.com/sypianski/koreader-rosetta).
+Consumed by the rosetta KOReader plugin (https://github.com/sypianski/rosetta.koplugin).
 Schema: https://github.com/sypianski/parallel-align-spec
 
 Usage:

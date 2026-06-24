@@ -6,7 +6,7 @@ with confidence scores. Handles m:n alignments (1:1, 1:2, 2:1, 2:2, 1:0,
 0:1) — translators routinely split or merge sentences, and pretending
 otherwise breaks the alignment.
 
-Primary consumer is the [rosetta KOReader plugin](https://github.com/sypianski/koreader-rosetta)
+Primary consumer is the [rosetta KOReader plugin](https://github.com/sypianski/rosetta.koplugin)
 which shows the aligned human translation in a panel beneath the original
 text — see `emit_rosetta.py` for the post-processing step that converts a
 paraligilo alignment into the JSON format rosetta loads from a book's
