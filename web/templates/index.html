@@ -187,8 +187,8 @@
           <input type="radio" name="mode" value="ai" id="mode-ai">
           <div class="mode-body">
             <span class="mode-name">AI · embeddings</span>
-            <span class="mode-meta">OpenAI key required, ≈ 30 s, ≈ $0.10</span>
-            <div class="mode-blurb">Multilingual embeddings plus optional gpt-4o-mini sanity-check. Higher precision on paraphrases and restructured prose.</div>
+            <span class="mode-meta">API key required, ≈ 30 s, ≈ $0.10</span>
+            <div class="mode-blurb">Multilingual embeddings plus optional <code>gpt-4o-mini</code> sanity-check. Higher precision on paraphrases and restructured prose.</div>
           </div>
         </label>
       </div>
@@ -197,8 +197,13 @@
 
   <div id="ai-only">
     <div class="row">
-      <label class="lbl">OpenAI API key <span class="hint">used only to embed; never stored</span></label>
+      <label class="lbl">API key <span class="hint">used only to embed; never stored or logged</span></label>
       <input type="password" name="api_key" placeholder="sk-..." autocomplete="off">
+      <p class="fine" style="margin-top: 0.4rem;">Any OpenAI-compatible endpoint works — OpenAI itself, OpenRouter, Together, Groq, Mistral, a self-hosted vLLM/Ollama, &c. If using a non-OpenAI endpoint, set its base URL below; otherwise leave it blank.</p>
+    </div>
+    <div class="row">
+      <label class="lbl">Base URL <span class="hint">optional; defaults to <code>https://api.openai.com/v1</code></span></label>
+      <input type="text" name="base_url" placeholder="https://openrouter.ai/api/v1" autocomplete="off">
     </div>
     {% if has_server_key %}
     <div class="check">
@@ -208,7 +213,7 @@
     {% endif %}
     <div class="check">
       <input type="checkbox" name="llm" id="llm" checked>
-      <label for="llm">Run honest LLM rescore (+ ≈ $0.005, + ≈ 3 min) — labels false alignments truthfully rather than pretending.</label>
+      <label for="llm">Run honest LLM rescore (+ ≈ $0.005, + ≈ 3 min) — labels false alignments truthfully rather than pretending. Requires a chat-completion model named <code>gpt-4o-mini</code> at the endpoint.</label>
     </div>
   </div>
 
@@ -224,13 +229,19 @@
 
 <p>The free mode uses surface anchors — years, numbers, rare proper-noun co-occurrences chained monotonically — then a Gale-Church length-only dynamic-programming alignment with m:n moves between anchors. Classical 1993 technique, no model, no network.</p>
 
-<p>The AI mode adds multilingual sentence embeddings (OpenAI <em>text-embedding-3-large</em>) so semantic similarity informs the cost function, then optionally asks <em>gpt-4o-mini</em> to plainly label residual low-confidence pairs as <em>yes</em>, <em>partial</em>, or <em>no</em>. About $0.10 per book paid directly to OpenAI via your key.</p>
+<p>The AI mode adds multilingual sentence embeddings (default <em>text-embedding-3-large</em>) so semantic similarity informs the cost function, then optionally asks <em>gpt-4o-mini</em> to plainly label residual low-confidence pairs as <em>yes</em>, <em>partial</em>, or <em>no</em>. About $0.10 per book paid directly to your chosen API provider — OpenAI, OpenRouter, Together, Groq, Mistral, or a self-hosted OpenAI-compatible endpoint such as vLLM or Ollama.</p>
 
 <p>Measured on real pairs: 94% high+medium confidence on Sienkiewicz <em>Quo Vadis</em> (PL↔EN, deterministic), 86% on Tom Segev <em>Seventh Million</em> (EN↔IT, AI mode). Translator faithfulness matters more than language pair.</p>
 
 <h2>Source</h2>
 
-<p><a href="https://github.com/sypianski/paraligilo">github.com/sypianski/paraligilo</a> — AGPL-3.0. Built for the <a href="https://github.com/sypianski/koreader-konfig">splitread KOReader plugin</a> but useful for parallel reading apps, bilingual EPUB construction, language-learning decks, translation studies.</p>
+<p><a href="https://github.com/sypianski/paraligilo">github.com/sypianski/paraligilo</a> — AGPL-3.0. Built for the <a href="https://github.com/sypianski/koreader-konfig">Rosetta KOReader plugin</a> but useful for parallel reading apps, bilingual EPUB construction, language-learning decks, translation studies.</p>
+
+<hr />
+
+<footer style="margin-top: 1rem; font-size: 0.88rem; color: var(--ink-mute); font-style: italic;">
+  by <a href="https://sypian.ski/" style="color: var(--accent-dark); font-style: normal;">Jakub Sypiański</a>
+</footer>
 
 </main>
 

@@ -101,7 +101,7 @@ async def _save_upload(uf: UploadFile, dst: Path) -> int:
     return total
 
 
-async def _run_pipeline(job_id: str, api_key: str, mode: str, llm: bool):
+async def _run_pipeline(job_id: str, api_key: str, mode: str, llm: bool, base_url: str = ""):
     async with RUN_SEM:
         j = JOBS[job_id]
         j["status"] = "running"
@@ -111,6 +111,10 @@ async def _run_pipeline(job_id: str, api_key: str, mode: str, llm: bool):
             env["OPENAI_API_KEY"] = api_key
         else:
             env.pop("OPENAI_API_KEY", None)
+        if base_url:
+            env["OPENAI_BASE_URL"] = base_url
+        else:
+            env.pop("OPENAI_BASE_URL", None)
         cmd = [
             str(RUN_PY),
             str(j["orig_path"]),
@@ -185,6 +189,7 @@ async def start_align(
     trans: UploadFile = File(...),
     mode: str = Form("deterministic"),
     api_key: str = Form(""),
+    base_url: str = Form(""),
     llm: Optional[str] = Form(None),
     use_server_key: Optional[str] = Form(None),
 ):
@@ -196,13 +201,15 @@ async def start_align(
         raise HTTPException(400, "mode must be deterministic or ai")
 
     chosen_key = ""
+    chosen_base_url = base_url.strip()
     if mode == "ai":
         chosen_key = api_key.strip()
         if not chosen_key:
             if use_server_key and SERVER_FALLBACK_KEY:
                 chosen_key = SERVER_FALLBACK_KEY
+                chosen_base_url = ""  # don't leak user-set base URL onto server key
             else:
-                raise HTTPException(400, "AI mode requires an OpenAI API key (or check the server-key box if available)")
+                raise HTTPException(400, "AI mode requires an API key (or check the server-key box if available)")
 
     job_id, jdir = _new_job_dir()
     orig_path = jdir / "orig.epub"
@@ -222,7 +229,7 @@ async def start_align(
         "created_at": time.time(),
         "use_server_key": bool(mode == "ai" and use_server_key and not api_key.strip()),
     }
-    asyncio.create_task(_run_pipeline(job_id, chosen_key, mode=mode, llm=bool(llm and mode == "ai")))
+    asyncio.create_task(_run_pipeline(job_id, chosen_key, mode=mode, llm=bool(llm and mode == "ai"), base_url=chosen_base_url))
     return RedirectResponse(str(request.url_for("job_view", job_id=job_id)), status_code=303)
 
 

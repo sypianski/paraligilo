@@ -68,13 +68,20 @@ translations (Curtin) score better than modern restructured ones (Segev).
 
 Each script is a standalone [uv](https://github.com/astral-sh/uv) inline
 script — dependencies declared in a `# /// script` header, installed on
-first run. You only need `uv` in `PATH` and an OpenAI API key in `$OPENAI_API_KEY`
-(also picked up from `~/.hermes/.env` or `~/.env`).
+first run. You only need `uv` in `PATH` and an API key for the AI mode
+(deterministic mode needs no key).
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh   # if you don't have uv
-export OPENAI_API_KEY=sk-...
+export OPENAI_API_KEY=sk-...                       # or any compatible key
+# optional: point at a non-OpenAI endpoint
+export OPENAI_BASE_URL=https://openrouter.ai/api/v1
 ```
+
+Any OpenAI-compatible endpoint works — OpenAI itself, OpenRouter, Together,
+Groq, Mistral, a self-hosted vLLM/Ollama, &c. The pipeline uses the
+official `openai` Python SDK, which honours `OPENAI_BASE_URL`. Variables
+are also picked up from `~/.hermes/.env` or `~/.env`.
 
 ## Use
 
