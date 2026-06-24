@@ -2,17 +2,16 @@
 # /// script
 # requires-python = ">=3.11"
 # ///
-"""Emit rosetta-aligned.json from paraligilo final alignment + sentence files.
+"""Emit parallel-aligned.json from paraligilo final alignment + sentence files.
 
-Consumed by the rosetta KOReader plugin
-(https://github.com/sypianski/koreader-konfig → koplugins/rosetta.koplugin).
-Schema in koreader-konfig/koplugins/rosetta.koplugin/ANCHOR_FORMAT.md.
+Consumed by the rosetta KOReader plugin (https://github.com/sypianski/koreader-rosetta).
+Schema: https://github.com/sypianski/parallel-align-spec
 
 Usage:
     emit_rosetta.py --orig-jsonl X_orig.jsonl --trans-jsonl X_trans.jsonl \\
                     --align X_final.jsonl --src-lang it --tgt-lang pl \\
                     --src-file orig.epub --tgt-file trans.epub \\
-                    -o rosetta-aligned.json
+                    -o parallel-aligned.json
 """
 import argparse
 import hashlib
@@ -57,11 +56,22 @@ def normalize(text: str) -> str:
     """
     for k, v in QUOTE_FOLD:
         text = text.replace(k, v)
+    # Strip markdown emphasis markers (KOReader's Extract:toTitledPlainText
+    # injects *italic* and **bold** from <em>/<i>/<strong>/<b> spans, while
+    # paraligilo's HTML extract strips the tags but keeps the plain text).
+    text = re.sub(r"\*+", "", text)
+    # Strip footnote-suffix digits glued onto a word: 'Graniczna3' / 'ingrediencję2'.
+    text = re.sub(r"(\w)\d+", r"\1", text)
     for _ in range(2):
         text = INLINE_FOOTNOTE_NUM.sub(r"\1 \2", text)
     text = WS.sub(" ", text)
     text = text.strip()
     text = unicodedata.normalize("NFC", text)
+    # Drop whitespace adjacent to punctuation (must mirror Lua side):
+    # paraligilo extract inserts ' ' between adjacent inline elements
+    # ('„<em>X</em>!"' -> '„ X !'), crengine renders them flush ('„X!').
+    text = re.sub(r"\s+([!?.,;:)\]}\"'])", r"\1", text)
+    text = re.sub(r"([(\[{\"'])\s+", r"\1", text)
     return text.lower()
 
 
@@ -112,14 +122,14 @@ def main() -> None:
                     choices=["gale-church", "embeddings", "llm", "hybrid"])
     ap.add_argument("--generator", default="paraligilo")
     ap.add_argument("-o", "--out",
-                    help="Output path.  Defaults to <src-file>.sdr/rosetta-aligned.json "
+                    help="Output path.  Defaults to <src-file>.sdr/parallel-aligned.json "
                          "when --src-file ends in .epub.")
     args = ap.parse_args()
 
     # Default output to KOReader's sidecar location next to the source EPUB.
     if not args.out:
         if args.src_file and args.src_file.lower().endswith(".epub"):
-            args.out = args.src_file + ".sdr/rosetta-aligned.json"
+            args.out = args.src_file + ".sdr/parallel-aligned.json"
         else:
             ap.error("either --out or a .epub --src-file is required")
 
@@ -166,6 +176,7 @@ def main() -> None:
     para_to_sents = group_paragraphs(orig)
 
     by_hash: dict[str, dict] = {}
+    paragraphs: list[dict] = []   # ordered list with src+tgt for AI fallback
     matched = 0
     low_conf = 0
     skipped_no_alignment = 0
@@ -205,10 +216,19 @@ def main() -> None:
         if avg_conf < 0.5:
             low_conf += 1
         matched += 1
-        by_hash[key] = {"tgt": tgt_text, "confidence": round(avg_conf, 3)}
+        pos = len(paragraphs)
+        by_hash[key] = {"tgt": tgt_text, "confidence": round(avg_conf, 3), "pos": pos}
+        paragraphs.append({
+            "hash": key,
+            "src": src_text,        # keep full src text so the AI fallback can
+                                    # match by content even when a runtime hash
+                                    # diverges from the writer's hash.
+            "tgt": tgt_text,
+            "confidence": round(avg_conf, 3),
+        })
 
     out_doc = {
-        "rosetta_align_version": 1,
+        "epa_version": 2,
         "src": {"file": args.src_file, "lang": args.src_lang},
         "tgt": {"file": args.tgt_file, "lang": args.tgt_lang},
         "method": args.method,
@@ -221,6 +241,7 @@ def main() -> None:
             "skipped_no_alignment": skipped_no_alignment,
         },
         "by_hash": by_hash,
+        "paragraphs": paragraphs,
     }
 
     out_path = Path(args.out)
