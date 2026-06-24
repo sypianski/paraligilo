@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>paraligilo — bitext alignment</title>
+<style>
+  :root { --fg:#1c1917; --muted:#78716c; --bg:#fafaf9; --accent:#9a3412; --accent2:#15803d; --card:#fff; --border:#e7e5e4; }
+  body { font: 16px/1.5 -apple-system,system-ui,sans-serif; max-width: 760px; margin: 2em auto; padding: 0 1em; color: var(--fg); background: var(--bg); }
+  h1 { font-size: 1.6em; margin-bottom: .2em; }
+  .tagline { color: var(--muted); margin-top: 0; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1.2em; margin-top: 1.4em; }
+  label { display:block; font-weight: 600; margin-top: 1em; margin-bottom: .3em; }
+  .hint { color: var(--muted); font-weight: normal; font-size: .9em; margin-left: .4em; }
+  input[type=file], input[type=password], input[type=text] { width: 100%; padding: .5em; border: 1px solid var(--border); border-radius: 4px; font: inherit; box-sizing: border-box; }
+  .row { display: flex; gap: 1em; align-items: center; margin-top: .8em; font-size: .95em; }
+  .row input[type=checkbox] { width: auto; }
+  button { background: var(--accent); color: white; border: none; padding: .8em 1.6em; border-radius: 4px; font: inherit; font-weight: 600; cursor: pointer; margin-top: 1.4em; }
+  button:hover { background: #7c2d12; }
+  details { margin-top: 1em; }
+  summary { cursor: pointer; color: var(--muted); font-size: .9em; }
+  small { color: var(--muted); }
+  code { background: #f5f5f4; padding: .1em .3em; border-radius: 3px; }
+  .warn { background: #fff7ed; border-left: 3px solid #ea580c; padding: .8em; margin: 1em 0; font-size: .92em; }
+  .mode-pick { display:grid; grid-template-columns: 1fr 1fr; gap:.8em; margin-bottom:1em; }
+  .mode-pick label { display:block; border:2px solid var(--border); border-radius:6px; padding:.8em; cursor:pointer; margin:0; font-weight:normal; transition: border-color .15s; }
+  .mode-pick input[type=radio] { display:none; }
+  .mode-pick input[type=radio]:checked + .mode-body { color: var(--fg); }
+  .mode-pick label:has(input:checked) { border-color: var(--accent); background: #fff7ed; }
+  .mode-body strong { display:block; font-size:1em; font-weight:600; margin-bottom:.2em; }
+  .mode-body .meta { font-size:.85em; color: var(--muted); }
+  #ai-only { display: none; }
+  body:has(#mode-ai:checked) #ai-only { display: block; }
+</style>
+</head>
+<body>
+
+<h1>paraligilo</h1>
+<p class="tagline">Align an EPUB and its translation at sentence level. Returns a JSON map you can read in any tool that consumes parallel text.</p>
+
+<form action="/align" method="post" enctype="multipart/form-data" class="card">
+
+  <label>Original EPUB <span class="hint">the book in its source language</span></label>
+  <input type="file" name="orig" accept=".epub" required>
+
+  <label>Translation EPUB <span class="hint">the same book in another language</span></label>
+  <input type="file" name="trans" accept=".epub" required>
+
+  <label>Mode</label>
+  <div class="mode-pick">
+    <label>
+      <input type="radio" name="mode" value="deterministic" checked id="mode-det">
+      <div class="mode-body">
+        <strong>Free · deterministic</strong>
+        <div class="meta">No API key. Runs locally on the server in ~2s. Works offline. ~80–90% precision on clean translations.</div>
+      </div>
+    </label>
+    <label>
+      <input type="radio" name="mode" value="ai" id="mode-ai">
+      <div class="mode-body">
+        <strong>AI · OpenAI embeddings</strong>
+        <div class="meta">Higher precision (~86–94%). Needs your OpenAI key. ~$0.10 per book. ~30s.</div>
+      </div>
+    </label>
+  </div>
+
+  <div id="ai-only">
+    <label>OpenAI API key <span class="hint">used only to embed sentences; never stored</span></label>
+    <input type="password" name="api_key" placeholder="sk-..." autocomplete="off">
+
+    {% if has_server_key %}
+    <div class="row">
+      <input type="checkbox" name="use_server_key" id="srvkey">
+      <label for="srvkey" style="margin:0;font-weight:normal">Use this site's key instead (rate-limited, single-book trial)</label>
+    </div>
+    {% endif %}
+
+    <div class="row">
+      <input type="checkbox" name="llm" id="llm" checked>
+      <label for="llm" style="margin:0;font-weight:normal">Run honest LLM rescore (+ ~$0.005, ~3 min, honestly labels false alignments)</label>
+    </div>
+  </div>
+
+  <button type="submit">Align</button>
+
+  <p><small>Max upload size: {{ max_mb }}MB per EPUB. Output expires after 24h.</small></p>
+</form>
+
+<div class="warn">
+<strong>Important:</strong> Both files must be the same book — original and its translation. Two different books by the same author will produce confident-looking nonsense.
+</div>
+
+<details>
+  <summary>How the two modes differ</summary>
+  <div style="margin-top:.6em;font-size:.95em">
+    <p><strong>Deterministic mode</strong> uses surface tokens (years, numbers, rare proper-noun co-occurrences) as anchors, then a classic Gale-Church length-only dynamic-programming alignment. Free. Offline. Fast. Quality depends on how faithful the translation is structurally — classic literary translations score very high; heavily restructured modern ones score lower.</p>
+    <p><strong>AI mode</strong> uses OpenAI multilingual embeddings to score semantic similarity between sentences, plus optional gpt-4o-mini to honestly label suspected non-alignments. Higher precision on hard cases (paraphrases, idioms, partial overlaps), and gives meaningful per-pair confidence. Costs ~$0.10/book paid to OpenAI.</p>
+  </div>
+</details>
+
+<details>
+  <summary>What you'll get</summary>
+  <div style="margin-top:.6em">
+    <p><code>alignment.jsonl</code> — one record per aligned sentence pair (m:n moves supported), with confidence and method.</p>
+    <p><code>sample.md</code> — 100 stratified examples for manual quality check.</p>
+  </div>
+</details>
+
+<details>
+  <summary>Source &amp; license</summary>
+  <p><a href="https://github.com/sypianski/paraligilo">github.com/sypianski/paraligilo</a> · AGPL-3.0 · Built for the <a href="https://github.com/sypianski/koreader-konfig">splitread KOReader plugin</a>.</p>
+</details>
+
+</body>
+</html>

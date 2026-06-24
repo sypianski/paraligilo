@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>paraligilo job {{ job.id }}</title>
+<style>
+  :root { --fg:#1c1917; --muted:#78716c; --bg:#fafaf9; --accent:#9a3412; --card:#fff; --border:#e7e5e4; --good:#15803d; --bad:#b91c1c; }
+  body { font: 16px/1.5 -apple-system,system-ui,sans-serif; max-width: 720px; margin: 2em auto; padding: 0 1em; color: var(--fg); background: var(--bg); }
+  h1 { font-size: 1.4em; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1.2em; margin-top: 1em; }
+  .status { display: inline-block; padding: .15em .6em; border-radius: 4px; font-size: .85em; font-weight: 600; }
+  .status-queued, .status-running { background: #fef3c7; color: #92400e; }
+  .status-done { background: #d1fae5; color: var(--good); }
+  .status-failed { background: #fee2e2; color: var(--bad); }
+  .stage { color: var(--muted); margin-left: .8em; font-size: .9em; }
+  pre.tail { background:#1c1917; color:#e7e5e4; padding:.8em; border-radius:4px; font-size:.78em; max-height:300px; overflow:auto; white-space:pre-wrap; word-break: break-all; }
+  a.btn { display:inline-block; background:var(--accent); color:white; padding:.6em 1.2em; border-radius:4px; text-decoration:none; margin-right:.6em; margin-top:.4em; }
+  a.btn-secondary { background: #57534e; }
+  small { color: var(--muted); }
+  ul.files { list-style: none; padding: 0; }
+  ul.files li { padding: .3em 0; color: var(--muted); font-size: .9em; }
+</style>
+</head>
+<body>
+
+<p><small><a href="/">← back</a></small></p>
+<h1>Job <code>{{ job.id }}</code></h1>
+
+<div class="card">
+  <div>
+    <span class="status status-{{ job.status }}" id="status">{{ job.status }}</span>
+    <span class="stage" id="stage">{{ progress.stage }}</span>
+  </div>
+  <ul class="files">
+    <li>orig: {{ job.orig_name }}</li>
+    <li>trans: {{ job.trans_name }}</li>
+  </ul>
+  <div id="detail" style="color:var(--muted);font-size:.9em">{{ progress.detail }}</div>
+  <div id="elapsed" style="color:var(--muted);font-size:.9em;margin-top:.3em">elapsed: starting…</div>
+
+  <div id="downloads" style="display:none;margin-top:1em">
+    <a class="btn" href="/job/{{ job.id }}/download/alignment">alignment.jsonl</a>
+    <a class="btn btn-secondary" href="/job/{{ job.id }}/download/sample">sample.md</a>
+    <a class="btn btn-secondary" href="/job/{{ job.id }}/download/log">run.log</a>
+  </div>
+
+  <details style="margin-top:1em">
+    <summary>Live log tail</summary>
+    <pre class="tail" id="tail">{{ progress.tail or "" }}</pre>
+  </details>
+</div>
+
+<script>
+const jobId = {{ job.id|tojson }};
+function fmtTime(s) {
+  const m = Math.floor(s/60), r = s%60;
+  return m ? `${m}m ${r}s` : `${r}s`;
+}
+async function poll() {
+  try {
+    const r = await fetch(`/job/${jobId}/status`);
+    const d = await r.json();
+    document.getElementById("status").textContent = d.status;
+    document.getElementById("status").className = "status status-" + d.status;
+    document.getElementById("stage").textContent = d.stage;
+    document.getElementById("detail").textContent = d.detail || "";
+    document.getElementById("elapsed").textContent = "elapsed: " + fmtTime(d.elapsed);
+    if (d.tail) document.getElementById("tail").textContent = d.tail;
+    if (d.status === "done") {
+      document.getElementById("downloads").style.display = "";
+      return;
+    }
+    if (d.status === "failed") {
+      document.getElementById("downloads").style.display = "";  // for log
+      return;
+    }
+    setTimeout(poll, 2500);
+  } catch (e) {
+    setTimeout(poll, 5000);
+  }
+}
+poll();
+</script>
+
+</body>
+</html>

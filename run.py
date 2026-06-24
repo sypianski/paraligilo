@@ -34,16 +34,18 @@ def main():
     ap.add_argument("trans_epub")
     ap.add_argument("--name", required=True, help="output basename (e.g. segev)")
     ap.add_argument("--workdir", default=str(HERE), help="output dir")
+    ap.add_argument("--mode", default="ai", choices=["ai", "deterministic"],
+                    help="ai: OpenAI embeddings (~$0.10/book); deterministic: free, offline, no key")
     ap.add_argument("--model", default="text-embedding-3-large",
                     choices=["text-embedding-3-small", "text-embedding-3-large"])
-    ap.add_argument("--stride", type=int, default=10, help="anchor stride")
+    ap.add_argument("--stride", type=int, default=10, help="(ai) anchor stride")
     ap.add_argument("--anchor-threshold", type=float, default=0.70)
     ap.add_argument("--no-rescore", action="store_true",
-                    help="skip concat re-embed for low-conf m:n")
+                    help="(ai) skip concat re-embed for low-conf m:n")
     ap.add_argument("--no-pass2", action="store_true",
-                    help="skip two-pass refinement")
+                    help="(ai) skip two-pass refinement")
     ap.add_argument("--llm", action="store_true",
-                    help="run optional gpt-4o-mini honest rescore (extra cost)")
+                    help="(ai) run optional gpt-4o-mini honest rescore (extra cost)")
     ap.add_argument("--llm-max-conf", type=float, default=0.50)
     ap.add_argument("--sample", type=int, default=50,
                     help="rows to put in verification sample.md (0=skip)")
@@ -61,55 +63,65 @@ def main():
     align1  = base.with_name(f"{args.name}_align.jsonl")
     sample  = base.with_name(f"{args.name}_sample.md")
 
-    # 1. extract
+    # 1. extract (both modes)
     run(HERE/"extract.py", args.orig_epub,  "-o", o_jsonl)
     run(HERE/"extract.py", args.trans_epub, "-o", t_jsonl)
-    # 2. embed
-    run(HERE/"embed.py", o_jsonl, "-o", o_npy, "--model", args.model)
-    run(HERE/"embed.py", t_jsonl, "-o", t_npy, "--model", args.model)
-    # 3. anchors
-    run(HERE/"anchors.py", "--orig-npy", o_npy, "--trans-npy", t_npy,
-        "--stride", args.stride, "--threshold", args.anchor_threshold,
-        "-o", anchors)
-    # 4. align
-    run(HERE/"align_full.py",
-        "--orig-jsonl", o_jsonl, "--trans-jsonl", t_jsonl,
-        "--orig-npy", o_npy, "--trans-npy", t_npy,
-        "--anchors", anchors, "-o", align1)
-    # 5. rescore concat
-    current = align1
-    if not args.no_rescore:
-        align2 = base.with_name(f"{args.name}_align_concat.jsonl")
-        run(HERE/"rescore_concat.py",
+
+    if args.mode == "deterministic":
+        # No-AI path: surface-token anchors + length-only Gale-Church DP
+        run(HERE/"anchors_det.py",
+            "--orig-jsonl", o_jsonl, "--trans-jsonl", t_jsonl, "-o", anchors)
+        run(HERE/"align_det.py",
             "--orig-jsonl", o_jsonl, "--trans-jsonl", t_jsonl,
-            "--align", current, "--model", args.model, "-o", align2)
-        current = align2
-    # 6. pass2
-    if not args.no_pass2:
-        align3 = base.with_name(f"{args.name}_align_pass2.jsonl")
-        anchors2 = base.with_name(f"{args.name}_anchors_pass2.jsonl")
-        run(HERE/"refine.py",
+            "--anchors", anchors, "-o", align1)
+        current = align1
+    else:
+        # AI path
+        # 2. embed
+        run(HERE/"embed.py", o_jsonl, "-o", o_npy, "--model", args.model)
+        run(HERE/"embed.py", t_jsonl, "-o", t_npy, "--model", args.model)
+        # 3. anchors
+        run(HERE/"anchors.py", "--orig-npy", o_npy, "--trans-npy", t_npy,
+            "--stride", args.stride, "--threshold", args.anchor_threshold,
+            "-o", anchors)
+        # 4. align
+        run(HERE/"align_full.py",
             "--orig-jsonl", o_jsonl, "--trans-jsonl", t_jsonl,
             "--orig-npy", o_npy, "--trans-npy", t_npy,
-            "--align", current, "--anchors", anchors,
-            "-o", align3, "--anchors-out", anchors2)
-        # one more concat-rescore after pass2 since it may have re-routed
+            "--anchors", anchors, "-o", align1)
+        # 5. rescore concat
+        current = align1
         if not args.no_rescore:
-            align3b = base.with_name(f"{args.name}_align_pass2_concat.jsonl")
+            align2 = base.with_name(f"{args.name}_align_concat.jsonl")
             run(HERE/"rescore_concat.py",
                 "--orig-jsonl", o_jsonl, "--trans-jsonl", t_jsonl,
-                "--align", align3, "--model", args.model, "-o", align3b)
-            current = align3b
-        else:
-            current = align3
-    # 7. LLM (optional)
-    if args.llm:
-        align_llm = base.with_name(f"{args.name}_align_llm.jsonl")
-        run(HERE/"rescore_llm.py",
-            "--orig-jsonl", o_jsonl, "--trans-jsonl", t_jsonl,
-            "--align", current, "--max-conf", args.llm_max_conf,
-            "-o", align_llm)
-        current = align_llm
+                "--align", current, "--model", args.model, "-o", align2)
+            current = align2
+        # 6. pass2
+        if not args.no_pass2:
+            align3 = base.with_name(f"{args.name}_align_pass2.jsonl")
+            anchors2 = base.with_name(f"{args.name}_anchors_pass2.jsonl")
+            run(HERE/"refine.py",
+                "--orig-jsonl", o_jsonl, "--trans-jsonl", t_jsonl,
+                "--orig-npy", o_npy, "--trans-npy", t_npy,
+                "--align", current, "--anchors", anchors,
+                "-o", align3, "--anchors-out", anchors2)
+            if not args.no_rescore:
+                align3b = base.with_name(f"{args.name}_align_pass2_concat.jsonl")
+                run(HERE/"rescore_concat.py",
+                    "--orig-jsonl", o_jsonl, "--trans-jsonl", t_jsonl,
+                    "--align", align3, "--model", args.model, "-o", align3b)
+                current = align3b
+            else:
+                current = align3
+        # 7. LLM (optional)
+        if args.llm:
+            align_llm = base.with_name(f"{args.name}_align_llm.jsonl")
+            run(HERE/"rescore_llm.py",
+                "--orig-jsonl", o_jsonl, "--trans-jsonl", t_jsonl,
+                "--align", current, "--max-conf", args.llm_max_conf,
+                "-o", align_llm)
+            current = align_llm
 
     # final symlink
     final = base.with_name(f"{args.name}_final.jsonl")
