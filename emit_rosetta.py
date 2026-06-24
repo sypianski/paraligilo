@@ -25,21 +25,44 @@ from pathlib import Path
 
 
 WS = re.compile(r"\s+")
+# Footnote marker straggler: " 3 " between two letters that we couldn't strip
+# at the HTML stage because the EPUB used inline non-anchor markup.
+INLINE_FOOTNOTE_NUM = re.compile(r"(\w)\s+\d{1,3}\s+(\w)")
+# Curly-quote / dash variants that crengine may render differently.
+QUOTE_FOLD = [
+    ("\u00a0", " "),       # NBSP
+    ("\u00ad", ""),        # soft hyphen \u2014 crengine drops when rendering
+    ("\ufeff", ""),        # BOM / ZWNBSP
+    ("\u200b", ""),        # zero-width space
+    ("\u200c", ""), ("\u200d", ""),   # ZWNJ / ZWJ
+    ("\u201e", '"'), ("\u201d", '"'), ("\u201c", '"'),
+    ("\u00ab", '"'), ("\u00bb", '"'),
+    ("\u201a", "'"), ("\u2019", "'"), ("\u2018", "'"),
+    ("\u2039", "'"), ("\u203a", "'"),
+    ("\u2013", "-"), ("\u2014", "-"), ("\u2212", "-"),
+    ("\u2026", "..."),
+]
 
 
 def normalize(text: str) -> str:
-    """Match rosetta_aligned.lua:normalize() byte-for-byte.
+    """Tolerant paragraph normalization. Must stay in sync with
+    rosetta_aligned.lua:normalize() — both sides must produce the same hash.
 
-    1. Replace NBSP (U+00A0) with regular space.
-    2. Collapse runs of any whitespace to a single ASCII space.
-    3. Strip leading + trailing whitespace.
-    4. NFC normalize.
+    Steps:
+      1. Fold curly quotes / em-dashes / NBSP / ellipsis to ASCII.
+      2. Drop straggler inline footnote markers (Word N Word -> Word Word).
+      3. Collapse whitespace.
+      4. NFC normalize.
+      5. Lowercase.
     """
-    text = text.replace(" ", " ")
+    for k, v in QUOTE_FOLD:
+        text = text.replace(k, v)
+    for _ in range(2):
+        text = INLINE_FOOTNOTE_NUM.sub(r"\1 \2", text)
     text = WS.sub(" ", text)
     text = text.strip()
     text = unicodedata.normalize("NFC", text)
-    return text
+    return text.lower()
 
 
 def md5_hex(text: str) -> str:

@@ -71,6 +71,19 @@ def html_to_blocks(html):
     soup = BeautifulSoup(html, "lxml")
     for bad in soup(["script","style","head","nav","header","footer","img","svg"]):
         bad.decompose()
+    # Strip in-line footnote / annotation markers that KOReader doesn't render
+    # inside the paragraph text: <sup>N</sup>, <a class="footnote-ref">, etc.
+    # Without this, our extract gets 'Ulica Graniczna 3 jest…' while KOReader
+    # gives 'Ulica Graniczna jest…' and the hash never matches.
+    for sup in soup.find_all("sup"):
+        sup.decompose()
+    for a in soup.find_all("a"):
+        cls = " ".join(a.get("class", []))
+        if any(tok in cls for tok in ("anchor", "footnote-ref", "footnoteref",
+                                      "noteref", "annotation", "fnref")):
+            a.decompose()
+        elif a.get("epub:type") in ("noteref", "footnote"):
+            a.decompose()
     blocks = []
     block_tags = {"p","h1","h2","h3","h4","h5","h6","li","blockquote","dt","dd","div"}
     for el in soup.find_all(block_tags):
@@ -78,6 +91,10 @@ def html_to_blocks(html):
             continue
         text = el.get_text(" ", strip=True)
         text = re.sub(r"\s+", " ", text)
+        # Drop standalone section-break paragraphs that vary across editions
+        # (* / *** / "* * *" / § / —).
+        if text in ("*", "***", "* * *", "*  *  *", "§", "—", "–", "---", "* . *"):
+            continue
         if text:
             blocks.append((el.name.lower(), text))
     return blocks
