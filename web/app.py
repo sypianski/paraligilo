@@ -3,7 +3,7 @@
 # requires-python = ">=3.11"
 # dependencies = [
 #   "fastapi>=0.110", "uvicorn[standard]>=0.27", "python-multipart>=0.0.9",
-#   "jinja2>=3.1",
+#   "jinja2>=3.1", "slowapi>=0.1.9",
 # ]
 # ///
 """paraligilo web — minimal upload form + background alignment job + download.
@@ -27,6 +27,9 @@ from typing import Optional
 from fastapi import FastAPI, Form, HTTPException, Request, UploadFile, File
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 ROOT = Path(__file__).resolve().parent.parent     # paraligilo/
 RUN_PY = ROOT / "run.py"
@@ -36,6 +39,21 @@ MAX_CONCURRENT = int(os.environ.get("PARALIGILO_MAX_CONCURRENT", "2"))
 JOB_TTL_HOURS = int(os.environ.get("PARALIGILO_TTL_HOURS", "24"))
 MAX_UPLOAD_MB = int(os.environ.get("PARALIGILO_MAX_MB", "30"))
 SERVER_FALLBACK_KEY = os.environ.get("OPENAI_API_KEY")  # used for "free quota" if set
+
+# Rate limits — override via env to tighten/loosen.
+RL_ALIGN     = os.environ.get("PARALIGILO_RL_ALIGN",     "10/hour")
+RL_ALIGN_AI  = os.environ.get("PARALIGILO_RL_ALIGN_AI",  "3/hour")   # when server-key used
+RL_STATUS    = os.environ.get("PARALIGILO_RL_STATUS",    "120/minute")
+RL_DOWNLOAD  = os.environ.get("PARALIGILO_RL_DOWNLOAD",  "60/hour")
+
+def _client_ip(request: Request) -> str:
+    # Honour X-Forwarded-For when behind nginx (set proxy_set_header in nginx).
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return get_remote_address(request)
+
+limiter = Limiter(key_func=_client_ip, default_limits=["200/hour"])
 
 # In-memory job registry. Persists across requests within one uvicorn process.
 JOBS: dict[str, dict] = {}
@@ -61,6 +79,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="paraligilo", lifespan=lifespan)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
 def _new_job_dir() -> tuple[str, Path]:
@@ -158,7 +178,9 @@ async def home(request: Request):
 
 
 @app.post("/align")
+@limiter.limit(RL_ALIGN)
 async def start_align(
+    request: Request,
     orig: UploadFile = File(...),
     trans: UploadFile = File(...),
     mode: str = Form("deterministic"),
@@ -215,7 +237,8 @@ async def job_view(request: Request, job_id: str):
 
 
 @app.get("/job/{job_id}/status")
-async def job_status(job_id: str):
+@limiter.limit(RL_STATUS)
+async def job_status(request: Request, job_id: str):
     j = JOBS.get(job_id)
     if not j:
         raise HTTPException(404, "unknown job")
@@ -238,7 +261,8 @@ def _final_jsonl(j: dict) -> Optional[Path]:
 
 
 @app.get("/job/{job_id}/download/{kind}")
-async def download(job_id: str, kind: str):
+@limiter.limit(RL_DOWNLOAD)
+async def download(request: Request, job_id: str, kind: str):
     j = JOBS.get(job_id)
     if not j:
         raise HTTPException(404, "unknown job")
