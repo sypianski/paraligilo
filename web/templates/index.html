@@ -3,113 +3,655 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>paraligilo — bitext alignment</title>
+<title>paraligilo — sentence-level bitext alignment for EPUB</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..900,0..100,0..1&family=EB+Garamond:ital,wght@0,400..800;1,400..700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
-  :root { --fg:#1c1917; --muted:#78716c; --bg:#fafaf9; --accent:#9a3412; --accent2:#15803d; --card:#fff; --border:#e7e5e4; }
-  body { font: 16px/1.5 -apple-system,system-ui,sans-serif; max-width: 760px; margin: 2em auto; padding: 0 1em; color: var(--fg); background: var(--bg); }
-  h1 { font-size: 1.6em; margin-bottom: .2em; }
-  .tagline { color: var(--muted); margin-top: 0; }
-  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1.2em; margin-top: 1.4em; }
-  label { display:block; font-weight: 600; margin-top: 1em; margin-bottom: .3em; }
-  .hint { color: var(--muted); font-weight: normal; font-size: .9em; margin-left: .4em; }
-  input[type=file], input[type=password], input[type=text] { width: 100%; padding: .5em; border: 1px solid var(--border); border-radius: 4px; font: inherit; box-sizing: border-box; }
-  .row { display: flex; gap: 1em; align-items: center; margin-top: .8em; font-size: .95em; }
-  .row input[type=checkbox] { width: auto; }
-  button { background: var(--accent); color: white; border: none; padding: .8em 1.6em; border-radius: 4px; font: inherit; font-weight: 600; cursor: pointer; margin-top: 1.4em; }
-  button:hover { background: #7c2d12; }
-  details { margin-top: 1em; }
-  summary { cursor: pointer; color: var(--muted); font-size: .9em; }
-  small { color: var(--muted); }
-  code { background: #f5f5f4; padding: .1em .3em; border-radius: 3px; }
-  .warn { background: #fff7ed; border-left: 3px solid #ea580c; padding: .8em; margin: 1em 0; font-size: .92em; }
-  .mode-pick { display:grid; grid-template-columns: 1fr 1fr; gap:.8em; margin-bottom:1em; }
-  .mode-pick label { display:block; border:2px solid var(--border); border-radius:6px; padding:.8em; cursor:pointer; margin:0; font-weight:normal; transition: border-color .15s; }
-  .mode-pick input[type=radio] { display:none; }
-  .mode-pick input[type=radio]:checked + .mode-body { color: var(--fg); }
-  .mode-pick label:has(input:checked) { border-color: var(--accent); background: #fff7ed; }
-  .mode-body strong { display:block; font-size:1em; font-weight:600; margin-bottom:.2em; }
-  .mode-body .meta { font-size:.85em; color: var(--muted); }
-  #ai-only { display: none; }
-  body:has(#mode-ai:checked) #ai-only { display: block; }
+  :root {
+    --paper:        #f4ede0;
+    --paper-warm:   #ede4d2;
+    --paper-deep:   #e2d6bd;
+    --ink:          #1a1614;
+    --ink-soft:     #3d342c;
+    --ink-mute:     #6b5d4f;
+    --rule:         #c9bf9f;
+    --blood:        #7a1e1e;
+    --blood-deep:   #5a1010;
+    --gold:         #b08c3a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--paper); color: var(--ink); }
+  body {
+    font-family: 'EB Garamond', 'Iowan Old Style', Palatino, serif;
+    font-size: 19px; line-height: 1.55;
+    background-image:
+      radial-gradient(circle at 12% 18%, rgba(176, 140, 58, 0.06), transparent 40%),
+      radial-gradient(circle at 88% 82%, rgba(122, 30, 30, 0.05), transparent 40%);
+    min-height: 100vh;
+  }
+  /* paper grain */
+  body::before {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.1  0 0 0 0 0.09  0 0 0 0 0.08  0 0 0 0.045 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    mix-blend-mode: multiply; opacity: .55;
+  }
+  main { position: relative; z-index: 1; }
+
+  /* ── colophon strip ─────────────────────────────────── */
+  .colophon {
+    border-bottom: 1px solid var(--rule);
+    padding: 14px 32px;
+    display: flex; justify-content: space-between; align-items: baseline;
+    font: 11px/1 'JetBrains Mono', monospace;
+    text-transform: uppercase; letter-spacing: .18em;
+    color: var(--ink-mute);
+  }
+  .colophon .lang-strip { display: flex; gap: 20px; }
+  .colophon .lang-strip span { transition: color .2s; }
+  .colophon .lang-strip span:hover { color: var(--blood); cursor: default; }
+
+  /* ── masthead ───────────────────────────────────────── */
+  .masthead {
+    max-width: 1120px; margin: 0 auto; padding: 56px 32px 0;
+    display: grid; grid-template-columns: 1fr; gap: 28px;
+  }
+  .eyebrow {
+    font: 12px/1 'JetBrains Mono', monospace;
+    text-transform: uppercase; letter-spacing: .32em;
+    color: var(--blood); margin: 0 0 16px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .eyebrow::before, .eyebrow::after {
+    content: ''; flex: 1; height: 1px; background: var(--rule);
+  }
+
+  h1.title {
+    font-family: 'Fraunces', serif;
+    font-variation-settings: "opsz" 144, "SOFT" 100, "WONK" 1;
+    font-weight: 320;
+    font-size: clamp(72px, 13vw, 168px);
+    line-height: .88;
+    letter-spacing: -0.045em;
+    margin: 0;
+    color: var(--ink);
+  }
+  h1.title em {
+    font-style: italic; font-weight: 280;
+    font-variation-settings: "opsz" 144, "SOFT" 100, "WONK" 1;
+    color: var(--blood);
+  }
+
+  .dek {
+    font-family: 'EB Garamond', serif;
+    font-style: italic; font-size: 22px; line-height: 1.45;
+    color: var(--ink-soft); max-width: 620px;
+    margin-top: 8px;
+  }
+  .dek strong { font-weight: 600; font-style: normal; color: var(--ink); }
+
+  /* ── bilingual mirror sample ────────────────────────── */
+  .mirror {
+    max-width: 1120px; margin: 64px auto 0; padding: 0 32px;
+  }
+  .mirror-frame {
+    border-top: 2px solid var(--ink);
+    border-bottom: 1px solid var(--rule);
+    padding: 28px 0 32px;
+    display: grid; grid-template-columns: 1fr auto 1fr; gap: 0;
+    align-items: stretch;
+  }
+  .mirror-side { padding: 0 28px; position: relative; min-height: 86px; }
+  .mirror-side .lang-tag {
+    font: 11px/1 'JetBrains Mono', monospace;
+    text-transform: uppercase; letter-spacing: .22em;
+    color: var(--ink-mute); margin-bottom: 14px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .mirror-side .lang-tag::before {
+    content: ''; width: 8px; height: 8px; background: var(--blood); border-radius: 50%;
+  }
+  .mirror-side .line {
+    font-family: 'EB Garamond', serif;
+    font-size: 21px; line-height: 1.4; color: var(--ink);
+    opacity: 0; animation: typeIn 1.4s ease-out forwards;
+  }
+  .mirror-side.left  .line { animation-delay: .3s; }
+  .mirror-side.right .line { animation-delay: 1.2s; }
+  .mirror-rule {
+    width: 1px; background: var(--rule); position: relative;
+    align-self: stretch;
+  }
+  .mirror-rule::after {
+    content: '≈'; position: absolute;
+    top: 50%; left: 50%; transform: translate(-50%, -50%);
+    font-family: 'Fraunces', serif; font-size: 28px;
+    background: var(--paper); padding: 4px 8px;
+    color: var(--gold); font-weight: 300;
+  }
+  @keyframes typeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .mirror-caption {
+    font: 11px/1.4 'JetBrains Mono', monospace;
+    text-transform: uppercase; letter-spacing: .2em;
+    color: var(--ink-mute); text-align: center;
+    margin-top: 18px;
+  }
+  .mirror-caption .conf { color: var(--blood); font-weight: 600; }
+
+  /* ── form ────────────────────────────────────────────── */
+  .compose {
+    max-width: 1120px; margin: 88px auto 0; padding: 0 32px;
+    display: grid; grid-template-columns: 220px 1fr; gap: 64px;
+  }
+  .compose .section-head {
+    font-family: 'Fraunces', serif;
+    font-weight: 380; font-style: italic;
+    font-variation-settings: "opsz" 144, "SOFT" 50;
+    font-size: 32px; line-height: 1.05; color: var(--ink);
+    letter-spacing: -0.01em;
+    border-top: 2px solid var(--ink); padding-top: 16px;
+    position: sticky; top: 24px; align-self: start;
+  }
+  .compose .section-head .num {
+    display: block;
+    font: 12px/1 'JetBrains Mono', monospace;
+    text-transform: uppercase; letter-spacing: .28em;
+    color: var(--blood); margin-bottom: 12px;
+  }
+
+  form.manuscript { display: flex; flex-direction: column; gap: 36px; }
+
+  .field { display: block; }
+  .field-label {
+    font: 12px/1 'JetBrains Mono', monospace;
+    text-transform: uppercase; letter-spacing: .22em;
+    color: var(--ink-mute); margin-bottom: 10px;
+    display: flex; align-items: baseline; gap: 12px;
+  }
+  .field-label .roman {
+    font-family: 'Fraunces', serif; font-size: 18px; font-weight: 500;
+    font-style: normal; color: var(--blood);
+    text-transform: none; letter-spacing: -0.01em;
+  }
+  .field-hint {
+    font-family: 'EB Garamond', serif; font-style: italic;
+    font-size: 16px; color: var(--ink-mute);
+    text-transform: none; letter-spacing: 0;
+    margin-left: auto;
+  }
+
+  /* file input as upload card */
+  .file-card {
+    border: 1px solid var(--rule);
+    background: var(--paper-warm);
+    padding: 22px 26px;
+    transition: all .15s ease;
+    cursor: pointer; position: relative;
+  }
+  .file-card:hover { border-color: var(--ink); background: var(--paper-deep); }
+  .file-card input[type=file] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+  .file-card .filename {
+    font-family: 'EB Garamond', serif; font-size: 18px;
+    color: var(--ink); display: block;
+  }
+  .file-card .filename.empty { color: var(--ink-mute); font-style: italic; }
+  .file-card .meta {
+    font: 11px/1 'JetBrains Mono', monospace;
+    color: var(--ink-mute); margin-top: 6px;
+    text-transform: uppercase; letter-spacing: .15em;
+  }
+
+  /* mode picker */
+  .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .mode-card {
+    border: 1px solid var(--rule);
+    background: var(--paper-warm);
+    padding: 26px 24px;
+    cursor: pointer; position: relative;
+    transition: all .15s ease;
+  }
+  .mode-card:hover { border-color: var(--ink-soft); }
+  .mode-card input[type=radio] { position: absolute; opacity: 0; }
+  .mode-card .mode-name {
+    font-family: 'Fraunces', serif;
+    font-weight: 500; font-size: 28px;
+    line-height: 1; margin: 0 0 8px;
+    letter-spacing: -0.02em;
+  }
+  .mode-card .mode-name em {
+    font-style: italic; color: var(--blood);
+    font-variation-settings: "opsz" 144, "WONK" 1;
+  }
+  .mode-card .mode-byline {
+    font: 11px/1 'JetBrains Mono', monospace;
+    color: var(--ink-mute); margin-bottom: 14px;
+    text-transform: uppercase; letter-spacing: .2em;
+  }
+  .mode-card .mode-blurb {
+    font-family: 'EB Garamond', serif;
+    font-style: italic; font-size: 16px;
+    color: var(--ink-soft); line-height: 1.4;
+  }
+  .mode-card:has(input:checked) {
+    background: var(--paper-deep);
+    border-color: var(--ink);
+    box-shadow: 4px 4px 0 var(--ink);
+    transform: translate(-2px, -2px);
+  }
+  .mode-card:has(input:checked) .mode-name em { color: var(--blood-deep); }
+
+  /* ai-only block — slides in */
+  #ai-only {
+    overflow: hidden; max-height: 0; opacity: 0;
+    transition: max-height .3s ease, opacity .25s ease;
+  }
+  body:has(#mode-ai:checked) #ai-only {
+    max-height: 460px; opacity: 1;
+  }
+  #ai-only > .field { margin-top: 28px; }
+
+  input[type=password], input[type=text] {
+    width: 100%; padding: 14px 16px;
+    border: 1px solid var(--rule); background: var(--paper-warm);
+    font: 16px/1 'JetBrains Mono', monospace;
+    color: var(--ink); outline: none; border-radius: 0;
+  }
+  input[type=password]:focus, input[type=text]:focus {
+    border-color: var(--ink); background: var(--paper);
+  }
+  .checkbox-row { display: flex; align-items: flex-start; gap: 14px; margin-top: 16px; }
+  .checkbox-row input[type=checkbox] {
+    appearance: none; -webkit-appearance: none;
+    width: 22px; height: 22px; margin: 0; flex: 0 0 22px;
+    border: 1px solid var(--ink); background: var(--paper-warm);
+    cursor: pointer; position: relative; top: 2px;
+  }
+  .checkbox-row input[type=checkbox]:checked { background: var(--ink); }
+  .checkbox-row input[type=checkbox]:checked::after {
+    content: '✓'; position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--paper); font-size: 16px; font-weight: bold; line-height: 1;
+  }
+  .checkbox-row label {
+    font-family: 'EB Garamond', serif; font-size: 17px; line-height: 1.4;
+    color: var(--ink-soft); cursor: pointer;
+  }
+
+  /* submit */
+  .imprint-row {
+    margin-top: 16px; padding-top: 28px;
+    border-top: 1px solid var(--rule);
+    display: flex; align-items: center; justify-content: space-between; gap: 24px;
+  }
+  button.imprint {
+    background: var(--ink); color: var(--paper);
+    border: none; padding: 22px 44px;
+    font-family: 'Fraunces', serif; font-weight: 500;
+    font-variation-settings: "opsz" 144, "SOFT" 0, "WONK" 0;
+    font-size: 22px; line-height: 1;
+    cursor: pointer; letter-spacing: .02em;
+    transition: all .12s ease; border-radius: 0;
+    position: relative;
+  }
+  button.imprint::after {
+    content: '⇢'; margin-left: 14px;
+    font-family: 'JetBrains Mono', monospace; font-size: 22px;
+    color: var(--gold); font-weight: 400;
+    transition: transform .15s ease;
+    display: inline-block;
+  }
+  button.imprint:hover { background: var(--blood); color: var(--paper); }
+  button.imprint:hover::after { transform: translateX(4px); color: var(--paper-warm); }
+  .legal {
+    font: 11px/1.4 'JetBrains Mono', monospace;
+    text-transform: uppercase; letter-spacing: .18em;
+    color: var(--ink-mute); text-align: right;
+    max-width: 260px;
+  }
+
+  /* ── warning block ──────────────────────────────────── */
+  .marginalia {
+    max-width: 1120px; margin: 72px auto 0; padding: 0 32px;
+  }
+  .warn-card {
+    background: var(--paper-warm);
+    border-left: 4px solid var(--blood);
+    padding: 22px 28px;
+    display: grid; grid-template-columns: auto 1fr; gap: 22px; align-items: start;
+  }
+  .warn-card .glyph {
+    font-family: 'Fraunces', serif; font-style: italic;
+    font-size: 56px; line-height: .8; color: var(--blood);
+    font-variation-settings: "opsz" 144, "WONK" 1;
+  }
+  .warn-card .copy { font-family: 'EB Garamond', serif; font-size: 17px; line-height: 1.5; color: var(--ink-soft); }
+  .warn-card .copy strong { color: var(--ink); font-weight: 600; }
+
+  /* ── metrics / quality strip ────────────────────────── */
+  .ledger {
+    max-width: 1120px; margin: 88px auto 0; padding: 0 32px;
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 1px; background: var(--rule);
+    border-top: 2px solid var(--ink); border-bottom: 2px solid var(--ink);
+  }
+  .ledger-cell { background: var(--paper); padding: 28px 22px; }
+  .ledger-cell .figure {
+    font-family: 'Fraunces', serif; font-weight: 400;
+    font-variation-settings: "opsz" 144, "SOFT" 50;
+    font-size: 56px; line-height: 1; color: var(--ink);
+    letter-spacing: -0.04em;
+    margin-bottom: 8px;
+  }
+  .ledger-cell .figure .unit {
+    font-size: 22px; color: var(--ink-mute); font-weight: 400;
+    margin-left: 2px;
+  }
+  .ledger-cell .figure em {
+    font-style: italic; color: var(--blood);
+    font-variation-settings: "opsz" 144, "WONK" 1;
+  }
+  .ledger-cell .figure-label {
+    font: 11px/1.4 'JetBrains Mono', monospace;
+    text-transform: uppercase; letter-spacing: .18em;
+    color: var(--ink-mute);
+  }
+  .ledger-cell .figure-sub {
+    font-family: 'EB Garamond', serif; font-style: italic;
+    font-size: 15px; color: var(--ink-soft); margin-top: 6px;
+  }
+
+  /* ── method notes ───────────────────────────────────── */
+  .essay {
+    max-width: 1120px; margin: 88px auto 0; padding: 0 32px;
+    display: grid; grid-template-columns: 220px 1fr; gap: 64px;
+  }
+  .essay .label-col {
+    font: 11px/1.5 'JetBrains Mono', monospace;
+    text-transform: uppercase; letter-spacing: .22em;
+    color: var(--ink-mute);
+    border-top: 1px solid var(--rule); padding-top: 14px;
+  }
+  .essay h3 {
+    font-family: 'Fraunces', serif; font-weight: 400;
+    font-variation-settings: "opsz" 60;
+    font-size: 26px; line-height: 1.15;
+    color: var(--ink); margin: 0 0 14px;
+    letter-spacing: -0.01em;
+  }
+  .essay p {
+    font-family: 'EB Garamond', serif; font-size: 18px; line-height: 1.55;
+    color: var(--ink-soft); margin: 0 0 14px;
+  }
+  .essay p em { font-style: italic; color: var(--ink); }
+  .essay-block + .essay-block { margin-top: 44px; }
+
+  /* ── footer ─────────────────────────────────────────── */
+  footer {
+    max-width: 1120px; margin: 96px auto 0; padding: 36px 32px 60px;
+    border-top: 2px solid var(--ink);
+    display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 18px;
+    font: 11px/1.4 'JetBrains Mono', monospace;
+    text-transform: uppercase; letter-spacing: .2em;
+    color: var(--ink-mute);
+  }
+  footer a { color: var(--blood); text-decoration: none; border-bottom: 1px solid var(--rule); padding-bottom: 1px; }
+  footer a:hover { color: var(--blood-deep); border-color: var(--blood); }
+  footer .ornament {
+    font-family: 'Fraunces', serif; font-size: 24px; color: var(--gold);
+    font-style: italic; letter-spacing: 0;
+    text-transform: none;
+    font-variation-settings: "opsz" 144, "WONK" 1;
+  }
+
+  /* responsive */
+  @media (max-width: 880px) {
+    .compose, .essay { grid-template-columns: 1fr; gap: 28px; }
+    .compose .section-head, .essay .label-col { position: static; }
+    .modes { grid-template-columns: 1fr; }
+    .ledger { grid-template-columns: repeat(2, 1fr); }
+    .mirror-frame { grid-template-columns: 1fr; }
+    .mirror-rule { display: none; }
+    .mirror-side.right { border-top: 1px solid var(--rule); margin-top: 16px; padding-top: 22px; }
+    .imprint-row { flex-direction: column; align-items: stretch; gap: 18px; }
+    .legal { text-align: left; max-width: none; }
+    h1.title { font-size: clamp(56px, 16vw, 100px); }
+  }
 </style>
 </head>
 <body>
 
-<h1>paraligilo</h1>
-<p class="tagline">Align an EPUB and its translation at sentence level. Returns a JSON map you can read in any tool that consumes parallel text.</p>
+<main>
 
-<form action="{{ request.url_for('start_align') }}" method="post" enctype="multipart/form-data" class="card">
-
-  <label>Original EPUB <span class="hint">the book in its source language</span></label>
-  <input type="file" name="orig" accept=".epub" required>
-
-  <label>Translation EPUB <span class="hint">the same book in another language</span></label>
-  <input type="file" name="trans" accept=".epub" required>
-
-  <label>Mode</label>
-  <div class="mode-pick">
-    <label>
-      <input type="radio" name="mode" value="deterministic" checked id="mode-det">
-      <div class="mode-body">
-        <strong>Free · deterministic</strong>
-        <div class="meta">No API key. Runs locally on the server in ~2s. Works offline. ~80–90% precision on clean translations.</div>
-      </div>
-    </label>
-    <label>
-      <input type="radio" name="mode" value="ai" id="mode-ai">
-      <div class="mode-body">
-        <strong>AI · OpenAI embeddings</strong>
-        <div class="meta">Higher precision (~86–94%). Needs your OpenAI key. ~$0.10 per book. ~30s.</div>
-      </div>
-    </label>
+<div class="colophon">
+  <span>paraligilo · v. 1 · MMXXVI</span>
+  <div class="lang-strip">
+    <span>EN</span><span>IT</span><span>PL</span><span>FR</span><span>+ 50</span>
   </div>
-
-  <div id="ai-only">
-    <label>OpenAI API key <span class="hint">used only to embed sentences; never stored</span></label>
-    <input type="password" name="api_key" placeholder="sk-..." autocomplete="off">
-
-    {% if has_server_key %}
-    <div class="row">
-      <input type="checkbox" name="use_server_key" id="srvkey">
-      <label for="srvkey" style="margin:0;font-weight:normal">Use this site's key instead (rate-limited, single-book trial)</label>
-    </div>
-    {% endif %}
-
-    <div class="row">
-      <input type="checkbox" name="llm" id="llm" checked>
-      <label for="llm" style="margin:0;font-weight:normal">Run honest LLM rescore (+ ~$0.005, ~3 min, honestly labels false alignments)</label>
-    </div>
-  </div>
-
-  <button type="submit">Align</button>
-
-  <p><small>Max upload size: {{ max_mb }}MB per EPUB. Output expires after 24h.</small></p>
-</form>
-
-<div class="warn">
-<strong>Important:</strong> Both files must be the same book — original and its translation. Two different books by the same author will produce confident-looking nonsense.
+  <span>AGPL · sypian.ski/paraligilo</span>
 </div>
 
-<details>
-  <summary>How the two modes differ</summary>
-  <div style="margin-top:.6em;font-size:.95em">
-    <p><strong>Deterministic mode</strong> uses surface tokens (years, numbers, rare proper-noun co-occurrences) as anchors, then a classic Gale-Church length-only dynamic-programming alignment. Free. Offline. Fast. Quality depends on how faithful the translation is structurally — classic literary translations score very high; heavily restructured modern ones score lower.</p>
-    <p><strong>AI mode</strong> uses OpenAI multilingual embeddings to score semantic similarity between sentences, plus optional gpt-4o-mini to honestly label suspected non-alignments. Higher precision on hard cases (paraphrases, idioms, partial overlaps), and gives meaningful per-pair confidence. Costs ~$0.10/book paid to OpenAI.</p>
+<header class="masthead">
+  <div>
+    <p class="eyebrow">A workshop for bilingual reading</p>
+    <h1 class="title">par<em>al</em>igil<em>o</em></h1>
+    <p class="dek">
+      Take a book in one language, the same book in another, and produce a precise
+      <strong>sentence-by-sentence map</strong> between them. Free, deterministic, runs in the time it takes
+      to pour a glass. Optionally sharpened by embeddings.
+    </p>
   </div>
-</details>
+</header>
 
-<details>
-  <summary>What you'll get</summary>
-  <div style="margin-top:.6em">
-    <p><code>alignment.jsonl</code> — one record per aligned sentence pair (m:n moves supported), with confidence and method.</p>
-    <p><code>sample.md</code> — 100 stratified examples for manual quality check.</p>
+<section class="mirror">
+  <div class="mirror-frame">
+    <div class="mirror-side left">
+      <div class="lang-tag">Polski · sent. 1543</div>
+      <p class="line">Oto jest prawnukiem boskiego Augusta.</p>
+    </div>
+    <div class="mirror-rule"></div>
+    <div class="mirror-side right">
+      <div class="lang-tag">English · sent. 1432</div>
+      <p class="line">He is the great-grandson of the deified Augustus.</p>
+    </div>
   </div>
-</details>
+  <p class="mirror-caption">specimen · move <span class="conf">1 : 1</span> · confidence <span class="conf">0.866</span> · Sienkiewicz, <em style="font-style:italic;font-family:'EB Garamond',serif;text-transform:none;letter-spacing:0">Quo Vadis</em></p>
+</section>
 
-<details>
-  <summary>Source &amp; license</summary>
-  <p><a href="https://github.com/sypianski/paraligilo">github.com/sypianski/paraligilo</a> · AGPL-3.0 · Built for the <a href="https://github.com/sypianski/koreader-konfig">splitread KOReader plugin</a>.</p>
-</details>
+<section class="compose">
+  <aside class="section-head">
+    <span class="num">§ I</span>
+    Submit the two manuscripts
+  </aside>
+
+  <form class="manuscript" action="{{ request.url_for('start_align') }}" method="post" enctype="multipart/form-data">
+
+    <div class="field">
+      <div class="field-label">
+        <span class="roman">i.</span> Original
+        <span class="field-hint">— the book in its source language</span>
+      </div>
+      <label class="file-card">
+        <input type="file" name="orig" accept=".epub" required onchange="updateFilename(this)">
+        <span class="filename empty">Choose an EPUB…</span>
+        <span class="meta">accepts .epub · ≤ {{ max_mb }} MB</span>
+      </label>
+    </div>
+
+    <div class="field">
+      <div class="field-label">
+        <span class="roman">ii.</span> Translation
+        <span class="field-hint">— the same book in another language</span>
+      </div>
+      <label class="file-card">
+        <input type="file" name="trans" accept=".epub" required onchange="updateFilename(this)">
+        <span class="filename empty">Choose an EPUB…</span>
+        <span class="meta">accepts .epub · ≤ {{ max_mb }} MB</span>
+      </label>
+    </div>
+
+    <div class="field">
+      <div class="field-label">
+        <span class="roman">iii.</span> Method
+      </div>
+      <div class="modes">
+        <label class="mode-card">
+          <input type="radio" name="mode" value="deterministic" checked id="mode-det">
+          <div class="mode-name">Free <em>·</em> deterministic</div>
+          <div class="mode-byline">No key · offline · ≈ 2 s</div>
+          <div class="mode-blurb">
+            Surface-token anchors and classic Gale-Church length DP. 80–90 % precision on faithful
+            translations. Best for first-pass and most classic literature.
+          </div>
+        </label>
+        <label class="mode-card">
+          <input type="radio" name="mode" value="ai" id="mode-ai">
+          <div class="mode-name"><em>Refined</em> · with AI</div>
+          <div class="mode-byline">OpenAI · ≈ 30 s · $0.10</div>
+          <div class="mode-blurb">
+            Multilingual embeddings plus optional gpt-4o-mini sanity-check. Higher precision
+            on paraphrases and restructured prose. Bring your own API key.
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <div id="ai-only">
+      <div class="field">
+        <div class="field-label">
+          <span class="roman">iv.</span> OpenAI key
+          <span class="field-hint">— used to embed sentences; never stored or logged</span>
+        </div>
+        <input type="password" name="api_key" placeholder="sk-…" autocomplete="off">
+
+        {% if has_server_key %}
+        <div class="checkbox-row">
+          <input type="checkbox" name="use_server_key" id="srvkey">
+          <label for="srvkey">Use this site's key instead — rate-limited trial</label>
+        </div>
+        {% endif %}
+
+        <div class="checkbox-row">
+          <input type="checkbox" name="llm" id="llm" checked>
+          <label for="llm">Run honest LLM rescore (+ $0.005, + ~3 min) — labels false alignments truthfully instead of pretending</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="imprint-row">
+      <button type="submit" class="imprint">Set in parallel</button>
+      <div class="legal">
+        Files removed after 24 h.<br>
+        No tracking. No key storage.
+      </div>
+    </div>
+
+  </form>
+</section>
+
+<aside class="marginalia">
+  <div class="warn-card">
+    <div class="glyph">!</div>
+    <div class="copy">
+      <strong>Verify your pair first.</strong> Two different books by the same author
+      will produce confident-looking nonsense. Skim the produced sample.md before
+      trusting the alignment — a known scene should map to a known scene.
+    </div>
+  </div>
+</aside>
+
+<section class="ledger">
+  <div class="ledger-cell">
+    <div class="figure">94<span class="unit">%</span></div>
+    <div class="figure-label">high + medium fidelity</div>
+    <div class="figure-sub">Sienkiewicz <em>Quo Vadis</em>, PL ↔ EN, deterministic</div>
+  </div>
+  <div class="ledger-cell">
+    <div class="figure">86<span class="unit">%</span></div>
+    <div class="figure-label">high + medium fidelity</div>
+    <div class="figure-sub">Tom Segev <em>Seventh Million</em>, EN ↔ IT, with AI</div>
+  </div>
+  <div class="ledger-cell">
+    <div class="figure">8<span class="unit">×</span></div>
+    <div class="figure-label">m : n move types</div>
+    <div class="figure-sub">because translators split and merge sentences</div>
+  </div>
+  <div class="ledger-cell">
+    <div class="figure">$0<span class="unit">.10</span></div>
+    <div class="figure-label">cost in AI mode</div>
+    <div class="figure-sub">paid directly to OpenAI by you</div>
+  </div>
+</section>
+
+<section class="essay">
+  <div class="label-col">§ II · Method</div>
+  <div>
+    <div class="essay-block">
+      <h3>Why two modes?</h3>
+      <p>
+        Classical alignment — <em>Gale &amp; Church, 1993</em> — uses nothing more than sentence
+        length. It is fast, free, and on a faithful classic literary translation it lands
+        plainly correct alignments most of the time. The deterministic mode here adds
+        anchor pre-passes (rare proper-noun co-occurrences, dates, numbers, monotonic
+        chains) and then runs that classic DP between anchors with full m:n moves.
+      </p>
+      <p>
+        Where modern translators paraphrase, restructure, drop or add — where lengths
+        diverge — multilingual embeddings catch what surface tokens can't. The AI mode
+        adds a vector-space cost on top, re-embeds concatenated passages where m and n
+        differ, and (optionally) asks gpt-4o-mini to plainly say <em>yes</em>, <em>no</em>, or
+        <em>partial</em> for the residue that still looks ambiguous.
+      </p>
+    </div>
+
+    <div class="essay-block">
+      <h3>What you get back</h3>
+      <p>
+        A JSONL — one record per aligned pair — with original sentence indices, translation
+        sentence indices, the move type (<code style="font-family:'JetBrains Mono',monospace;font-size:.95em">1:1</code>, <code style="font-family:'JetBrains Mono',monospace;font-size:.95em">1:2</code>, <code style="font-family:'JetBrains Mono',monospace;font-size:.95em">2:1</code>, &c.), a confidence score,
+        and the method used. Plus a sample.md of 100 stratified pairs so you can read across
+        the bands and judge for yourself whether the result is fit for whatever you have in
+        mind for it.
+      </p>
+    </div>
+
+    <div class="essay-block">
+      <h3>What this is for</h3>
+      <p>
+        Parallel reading apps. Bilingual EPUB construction. Language-learning decks. Translation
+        studies. Anything that wants <em>this sentence here</em> to point to <em>that sentence
+        there</em>, in two languages, in a structured way you can build on.
+      </p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <span>paraligilo · AGPL-3.0</span>
+  <span class="ornament">·❦·</span>
+  <span>
+    <a href="https://github.com/sypianski/paraligilo">source on github</a>
+  </span>
+</footer>
+
+</main>
+
+<script>
+function updateFilename(input) {
+  const span = input.parentElement.querySelector('.filename');
+  if (input.files && input.files[0]) {
+    span.textContent = input.files[0].name;
+    span.classList.remove('empty');
+  } else {
+    span.textContent = 'Choose an EPUB…';
+    span.classList.add('empty');
+  }
+}
+</script>
 
 </body>
 </html>
