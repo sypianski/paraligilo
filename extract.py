@@ -127,6 +127,110 @@ def split_sentences(text, lang):
 
 HEADING_TAGS = {"h1","h2","h3","h4","h5","h6"}
 
+# Patterns marking the *first real chapter* of a book — used to drop everything
+# before it (cover, title page, dedication, foreword, preface, translator's
+# note, table of contents, etc.) which rarely aligns across editions and
+# poisons the deterministic anchor pass. Match is case-insensitive on the
+# heading text after stripping punctuation.
+BODY_START_PATTERNS = [
+    # explicit chapter labels in 4 main langs
+    re.compile(r"^(chapter|capitolo|rozdzia(?:[lł])|chapitre|ĉapitro|capítulo|kapitel)\s*(i{1,3}v?|iv|v|vi{0,3}|ix|x{1,3}|\d+|[a-z]?)\b", re.I),
+    # bare arabic numeral chapter ("1", "1.", "I", "I.")
+    re.compile(r"^(\d{1,3}\.?|[ivxlcdm]{1,5}\.?)$", re.I),
+    # "PART ONE" / "BOOK ONE" / "PRIMA PARTE"
+    re.compile(r"^(part|book|liber|libro|parte|część|partie)\b", re.I),
+    # "Prologue" / "Prologo" - some books open with this as their real body
+    re.compile(r"^(prologue|prologo|prolog|prólogo)\b", re.I),
+]
+# Heading texts that are NEVER the body start (front-matter markers)
+FRONT_MATTER_HEADINGS = {
+    "en": {"title page","cover","dedication","epigraph","contents","table of contents",
+           "foreword","preface","introduction","translator's note","translator's preface",
+           "author's note","author's preface","frontispiece","colophon",
+           "copyright","copyright page","about this edition"},
+    "it": {"copertina","frontespizio","indice","prefazione","introduzione",
+           "nota del traduttore","nota dell'autore","colofone","dedica"},
+    "pl": {"strona tytułowa","spis treści","przedmowa","wstęp","wprowadzenie",
+           "od tłumacza","od autora","dedykacja","kolofon"},
+    "fr": {"page de titre","couverture","table","table des matières","préface",
+           "avant-propos","introduction","note du traducteur","colophon","dédicace"},
+}
+
+# Paragraph-level patterns that mark e-text platform / copyright boilerplate.
+# Used to skip the front-matter when no explicit chapter heading is present.
+BLURB_RE = re.compile(
+    r"wolnelektury|wolne\s+lektury|fundacja|project\s+gutenberg|gutenberg\.org|"
+    r"wikifontaro|wikisource|esperantista\s+centra\s+librejo|centra\s+librejo|"
+    r"tous\s+droits|all\s+rights\s+reserved|represo\s+malpermesata|copyright|"
+    r"©|creative\s+commons|public\s+domain|domaine\s+public|"
+    r"this\s+ebook|ten\s+ebook|elŝutita\s+el|downloaded\s+from|"
+    r"^rue\s+de\s+|^\d+,?\s+rue\s+|^d\s*ro\s+l\.?$|wszelkie\s+prawa|"
+    r"el\s+pola\s+lingvo|el\s+franca\s+lingvo|el\s+angla\s+lingvo|el\s+rusa\s+lingvo|"
+    r"el\s+german[ai]\s+lingvo|kun\s+permeso\s+de\s+la\s+aŭtorino|tradukita\s+de|"
+    r"translated\s+(by|from)|traduit\s+(par|de)|tradotto\s+(da|dal)|"
+    r"przełożył|przekład|tłumaczenie",
+    re.IGNORECASE,
+)
+# Lines that look like all-caps title-page text (NAME, IMPRINT, FRONTISPIECE) —
+# short (< 60 chars) and contain mostly uppercase letters with no sentence-end
+# punctuation. Common on cover/title pages of older editions.
+TITLEISH_RE = re.compile(r"^[A-ZĄĆĘŁŃÓŚŹŻÀ-ÖØ-Ý][A-ZĄĆĘŁŃÓŚŹŻĈĜĤĴŜŬÀ-ÖØ-Ý0-9 ,\.\-—–:;'\"()]*$")
+
+def _is_titleish(text):
+    s = text.strip()
+    if len(s) > 60 or len(s) < 2: return False
+    if s.endswith(".") or s.endswith("?") or s.endswith("!"):
+        return False
+    # mostly uppercase letters
+    letters = [c for c in s if c.isalpha()]
+    if not letters: return False
+    upper_ratio = sum(1 for c in letters if c.isupper()) / len(letters)
+    return upper_ratio > 0.85 and bool(TITLEISH_RE.match(s))
+
+def _heading_text(s):
+    return (s or "").strip().lower().rstrip(":.,;")
+
+def find_body_start(rows, lang):
+    """Return index of the first row of real book body. 0 if no front-matter detected.
+
+    Strategy, tried in order:
+      1. Explicit chapter heading ("Rozdział I", "Chapter 1", "Prologo", …)
+      2. First substantial body paragraph (>= MIN_BODY_PARA_CHARS) after we
+         have already skipped past any platform-blurb rows (wolnelektury,
+         wikifontaro, copyright, …) and other heading-only matter.
+    """
+    fm = FRONT_MATTER_HEADINGS.get(lang, FRONT_MATTER_HEADINGS["en"])
+
+    # 1. explicit chapter heading
+    for i, r in enumerate(rows[:300]):
+        if not r.get("is_heading"):
+            continue
+        t = _heading_text(r["text"])
+        if t in fm:
+            continue
+        for pat in BODY_START_PATTERNS:
+            if pat.search(t):
+                return i
+
+    # 2. heuristic: walk the head of the book, skipping headings + blurb
+    #    paragraphs (wolnelektury, copyright, colophon-style addresses).
+    #    First row that's not a heading and not a blurb line == body start.
+    #    Short aphoristic openers ("Życie kobiety to wiecznie…") count as body.
+    last_skip_end = 0
+    for i, r in enumerate(rows[:400]):
+        text = r["text"]
+        if r.get("is_heading"):
+            last_skip_end = i + 1
+            continue
+        if BLURB_RE.search(text):
+            last_skip_end = i + 1
+            continue
+        if _is_titleish(text):
+            last_skip_end = i + 1
+            continue
+        return last_skip_end
+    return 0
+
 def is_skip_heading(text, lang):
     skip = SKIP_SECTIONS.get(lang, SKIP_SECTIONS["en"])
     t = text.strip().lower().rstrip(":.")
@@ -179,6 +283,16 @@ def extract(epub_path):
             para_idx += 1
     print(f"  skipped blocks (notes/biblio/etc.): {n_skipped_blocks}", file=sys.stderr)
     print(f"  filtered noise blocks: {n_noise}", file=sys.stderr)
+
+    # Drop front-matter: title page, dedication, foreword, etc. Those rarely
+    # align across editions/translations and only generate noise misses.
+    start = find_body_start(rows, lang)
+    if start > 0:
+        cut = rows[start:]
+        head_text = rows[start]["text"][:60].replace("\n"," ")
+        print(f"  body-start detected at row {start} ({len(rows)-start} of {len(rows)} kept) — heading: {head_text!r}", file=sys.stderr)
+        return lang, cut
+    print(f"  body-start: not detected, keeping all {len(rows)} rows", file=sys.stderr)
     return lang, rows
 
 def main():
