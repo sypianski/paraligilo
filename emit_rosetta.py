@@ -204,13 +204,28 @@ def main() -> None:
                         seen_trans.add(t)
                         ordered_trans_idxs.append(t)
 
+        # Emit untranslated paragraphs (those whose only alignment rows landed
+        # in SKIP_METHODS) as empty-tgt placeholders. Keeps the paragraphs[]
+        # index contiguous with the source, which is what the proportional
+        # slicer relies on for partial-anchor windowing.  Consumers that want
+        # to skip empties can check tgt == "" or confidence == 0.0.
         if not ordered_trans_idxs:
             skipped_no_alignment += 1
+            pos = len(paragraphs)
+            by_hash[key] = {"tgt": "", "confidence": 0.0, "pos": pos}
+            paragraphs.append({
+                "hash": key, "src": src_text, "tgt": "", "confidence": 0.0,
+            })
             continue
         ordered_trans_idxs.sort()
         tgt_text = " ".join(trans[t].get("text", "") for t in ordered_trans_idxs).strip()
         if not tgt_text:
             skipped_no_alignment += 1
+            pos = len(paragraphs)
+            by_hash[key] = {"tgt": "", "confidence": 0.0, "pos": pos}
+            paragraphs.append({
+                "hash": key, "src": src_text, "tgt": "", "confidence": 0.0,
+            })
             continue
         avg_conf = sum(confs) / len(confs) if confs else 0.0
         if avg_conf < 0.5:
@@ -226,6 +241,31 @@ def main() -> None:
             "tgt": tgt_text,
             "confidence": round(avg_conf, 3),
         })
+
+    # Dedup overlapping tgt content between consecutive paragraphs.  The m:n
+    # alignment in align_full.py can map the same trans sentences into multiple
+    # adjacent orig paragraphs — when both render together in a KOReader page,
+    # the shared chunk shows up twice.  Trim the leading overlap from the
+    # later paragraph (>=40 chars of shared content) so each emitted tgt is
+    # unique.  by_hash entries are updated in lockstep.
+    n_dedup = 0
+    for i in range(1, len(paragraphs)):
+        prev_tgt = paragraphs[i - 1]["tgt"]
+        cur_tgt = paragraphs[i]["tgt"]
+        max_n = min(600, len(prev_tgt), len(cur_tgt))
+        overlap = 0
+        for n in range(max_n, 39, -1):
+            if prev_tgt[-n:] == cur_tgt[:n]:
+                overlap = n
+                break
+        if overlap > 0:
+            trimmed = cur_tgt[overlap:].lstrip()
+            if trimmed:
+                paragraphs[i]["tgt"] = trimmed
+                by_hash[paragraphs[i]["hash"]]["tgt"] = trimmed
+                n_dedup += 1
+    if n_dedup:
+        print(f"  deduped tgt overlap on {n_dedup} consecutive pairs", file=sys.stderr)
 
     out_doc = {
         "epa_version": 2,
