@@ -3,6 +3,13 @@
 Single-server VPS deployment behind nginx + Let's Encrypt. Written for
 `masawayh` (the author's VPS) but the pattern is portable.
 
+Two deployment shapes covered:
+- **Sub-path under an existing site** (e.g. `https://sypian.ski/paraligilo/`)
+- **Dedicated subdomain** (e.g. `https://paraligilo.example.com/`)
+
+Pick one. The systemd unit is the same; only the nginx config and the
+`PARALIGILO_ROOT_PATH` env var differ.
+
 ## Prerequisites
 
 - A VPS (Linux, x86_64 or ARM64)
@@ -36,6 +43,9 @@ Type=simple
 User=paraligilo
 WorkingDirectory=/home/paraligilo/app
 Environment=PORT=8088
+# Sub-path mount: set this to the URL prefix nginx routes here (with leading
+# slash, no trailing slash). Leave empty for subdomain deployment.
+Environment=PARALIGILO_ROOT_PATH=/paraligilo
 Environment=PARALIGILO_JOBS=/var/lib/paraligilo/jobs
 Environment=PARALIGILO_MAX_CONCURRENT=2
 Environment=PARALIGILO_MAX_MB=30
@@ -82,6 +92,47 @@ sudo systemctl status paraligilo --no-pager
 
 ## 3. nginx reverse proxy
 
+### Option A — sub-path under an existing site (e.g. sypian.ski/paraligilo)
+
+Add to your existing `server { listen 443 ssl ... }` block for `sypian.ski`:
+
+```nginx
+# Allow larger uploads on this path specifically.
+location /paraligilo/ {
+    # Strip the prefix when forwarding: backend sees the request at /.
+    # The trailing slash on proxy_pass is what makes the rewrite happen.
+    proxy_pass http://127.0.0.1:8088/;
+
+    proxy_http_version 1.1;
+    proxy_set_header Host              $host;
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-Host  $host;
+    # Tell the app what URL prefix it lives behind (matches PARALIGILO_ROOT_PATH).
+    proxy_set_header X-Forwarded-Prefix /paraligilo;
+
+    # Big enough for 2 × 30MB EPUBs plus form overhead.
+    client_max_body_size 80M;
+    client_body_timeout 120s;
+    send_timeout 120s;
+    proxy_read_timeout 600s;
+}
+```
+
+Reload nginx — no new certificate needed since you're under an existing
+HTTPS host:
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+curl -I https://sypian.ski/paraligilo/
+```
+
+In the systemd unit, keep `PARALIGILO_ROOT_PATH=/paraligilo` so the app
+generates absolute URLs like `/paraligilo/align` rather than `/align`.
+
+### Option B — dedicated subdomain (e.g. paraligilo.example.com)
+
 `/etc/nginx/sites-available/paraligilo.example.com`:
 
 ```nginx
@@ -104,8 +155,6 @@ server {
 
     # Big enough for 2 × 30MB EPUBs plus form overhead.
     client_max_body_size 80M;
-
-    # Don't terminate uploads early.
     client_body_timeout 120s;
     send_timeout 120s;
 
@@ -139,6 +188,9 @@ certbot rewrites the `server { listen 443 ... }` block in place to fill in
 ```bash
 curl -I https://paraligilo.example.com/
 ```
+
+For Option B, clear `PARALIGILO_ROOT_PATH=` in the systemd unit (empty
+string) — the app should generate root-relative URLs like `/align`.
 
 ## 4. Sanity checks
 

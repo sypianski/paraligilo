@@ -38,7 +38,7 @@
 <h1>paraligilo</h1>
 <p class="tagline">Align an EPUB and its translation at sentence level. Returns a JSON map you can read in any tool that consumes parallel text.</p>
 
-<form action="/align" method="post" enctype="multipart/form-data" class="card">
+<form action="{{ request.url_for('start_align') }}" method="post" enctype="multipart/form-data" class="card">
 
   <label>Original EPUB <span class="hint">the book in its source language</span></label>
   <input type="file" name="orig" accept=".epub" required>

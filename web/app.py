@@ -169,7 +169,7 @@ def _job_progress(j: dict) -> dict:
     return {"stage": cur, "detail": detail, "tail": tail[-1500:]}
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/", response_class=HTMLResponse, name="home")
 async def home(request: Request):
     return templates.TemplateResponse(request, "index.html", {
         "has_server_key": bool(SERVER_FALLBACK_KEY),
@@ -177,7 +177,7 @@ async def home(request: Request):
     })
 
 
-@app.post("/align")
+@app.post("/align", name="start_align")
 @limiter.limit(RL_ALIGN)
 async def start_align(
     request: Request,
@@ -223,10 +223,10 @@ async def start_align(
         "use_server_key": bool(mode == "ai" and use_server_key and not api_key.strip()),
     }
     asyncio.create_task(_run_pipeline(job_id, chosen_key, mode=mode, llm=bool(llm and mode == "ai")))
-    return RedirectResponse(f"/job/{job_id}", status_code=303)
+    return RedirectResponse(str(request.url_for("job_view", job_id=job_id)), status_code=303)
 
 
-@app.get("/job/{job_id}", response_class=HTMLResponse)
+@app.get("/job/{job_id}", response_class=HTMLResponse, name="job_view")
 async def job_view(request: Request, job_id: str):
     j = JOBS.get(job_id)
     if not j:
@@ -236,7 +236,7 @@ async def job_view(request: Request, job_id: str):
     })
 
 
-@app.get("/job/{job_id}/status")
+@app.get("/job/{job_id}/status", name="job_status")
 @limiter.limit(RL_STATUS)
 async def job_status(request: Request, job_id: str):
     j = JOBS.get(job_id)
@@ -260,7 +260,7 @@ def _final_jsonl(j: dict) -> Optional[Path]:
     return None
 
 
-@app.get("/job/{job_id}/download/{kind}")
+@app.get("/job/{job_id}/download/{kind}", name="download")
 @limiter.limit(RL_DOWNLOAD)
 async def download(request: Request, job_id: str, kind: str):
     j = JOBS.get(job_id)
@@ -288,4 +288,7 @@ async def download(request: Request, job_id: str, kind: str):
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", "8088"))
-    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
+    root_path = os.environ.get("PARALIGILO_ROOT_PATH", "")
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info",
+                root_path=root_path,
+                forwarded_allow_ips="*")  # trust nginx's X-Forwarded-*

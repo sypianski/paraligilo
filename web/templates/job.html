@@ -24,7 +24,7 @@
 </head>
 <body>
 
-<p><small><a href="/">← back</a></small></p>
+<p><small><a href="{{ request.url_for('home') }}">← back</a></small></p>
 <h1>Job <code>{{ job.id }}</code></h1>
 
 <div class="card">
@@ -40,9 +40,9 @@
   <div id="elapsed" style="color:var(--muted);font-size:.9em;margin-top:.3em">elapsed: starting…</div>
 
   <div id="downloads" style="display:none;margin-top:1em">
-    <a class="btn" href="/job/{{ job.id }}/download/alignment">alignment.jsonl</a>
-    <a class="btn btn-secondary" href="/job/{{ job.id }}/download/sample">sample.md</a>
-    <a class="btn btn-secondary" href="/job/{{ job.id }}/download/log">run.log</a>
+    <a class="btn" href="{{ request.url_for('download', job_id=job.id, kind='alignment') }}">alignment.jsonl</a>
+    <a class="btn btn-secondary" href="{{ request.url_for('download', job_id=job.id, kind='sample') }}">sample.md</a>
+    <a class="btn btn-secondary" href="{{ request.url_for('download', job_id=job.id, kind='log') }}">run.log</a>
   </div>
 
   <details style="margin-top:1em">
@@ -52,14 +52,14 @@
 </div>
 
 <script>
-const jobId = {{ job.id|tojson }};
+const STATUS_URL = {{ request.url_for('job_status', job_id=job.id)|string|tojson }};
 function fmtTime(s) {
   const m = Math.floor(s/60), r = s%60;
   return m ? `${m}m ${r}s` : `${r}s`;
 }
 async function poll() {
   try {
-    const r = await fetch(`/job/${jobId}/status`);
+    const r = await fetch(STATUS_URL);
     const d = await r.json();
     document.getElementById("status").textContent = d.status;
     document.getElementById("status").className = "status status-" + d.status;
