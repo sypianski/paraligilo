@@ -88,8 +88,17 @@ def main() -> None:
     ap.add_argument("--method",   default="hybrid",
                     choices=["gale-church", "embeddings", "llm", "hybrid"])
     ap.add_argument("--generator", default="paraligilo")
-    ap.add_argument("-o", "--out", required=True)
+    ap.add_argument("-o", "--out",
+                    help="Output path.  Defaults to <src-file>.sdr/rosetta-aligned.json "
+                         "when --src-file ends in .epub.")
     args = ap.parse_args()
+
+    # Default output to KOReader's sidecar location next to the source EPUB.
+    if not args.out:
+        if args.src_file and args.src_file.lower().endswith(".epub"):
+            args.out = args.src_file + ".sdr/rosetta-aligned.json"
+        else:
+            ap.error("either --out or a .epub --src-file is required")
 
     orig = load_sentences(Path(args.orig_jsonl))
     trans = load_sentences(Path(args.trans_jsonl))
@@ -170,6 +179,15 @@ def main() -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("w") as f:
         json.dump(out_doc, f, ensure_ascii=False, indent=0)
+
+    # Companion file: rosetta-paired.txt records the translation EPUB path so
+    # rosetta knows the pair even without parsing the JSON.  Only written when
+    # both src and tgt files are real .epub paths.
+    if (args.src_file and args.src_file.lower().endswith(".epub")
+            and args.tgt_file and args.tgt_file.lower().endswith(".epub")):
+        paired_path = Path(args.src_file + ".sdr/rosetta-paired.txt")
+        paired_path.parent.mkdir(parents=True, exist_ok=True)
+        paired_path.write_text(args.tgt_file)
 
     print(f"emit_rosetta: paragraphs={len(para_to_sents)} matched={matched} "
           f"low_conf={low_conf} skipped={skipped_no_alignment} → {out_path}",
