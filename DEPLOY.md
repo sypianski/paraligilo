@@ -1,7 +1,7 @@
 # Deploying paraligilo
 
 Single-server VPS deployment behind nginx + Let's Encrypt. Written for
-`masawayh` (the author's VPS) but the pattern is portable.
+`ibn-masawayh` (the author's VPS) but the pattern is portable.
 
 Two deployment shapes covered:
 - **Sub-path under an existing site** (e.g. `https://sypian.ski/paraligilo/`)
